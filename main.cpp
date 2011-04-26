@@ -15,6 +15,8 @@
  *                                                                         *
  ***************************************************************************/
 
+#include <libmarc/libmarc.h>
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <time.h>
@@ -30,6 +32,7 @@
 #include <stdlib.h>
 #include <iostream>
 #include <getopt.h>
+#include <errno.h>
 
 #include <mysql.h>
 #include <strings.h>
@@ -41,99 +44,13 @@
 int convMySQLtoFPI(struct FPI *rule,  MYSQL_RES *result);// 
 static char hex_string[IFHWADDRLEN * 3] = "00:00:00:00:00:00";
 
-
-struct filter {
-  uint32_t filter_id;                      // Integer identifying the rule. This should be uniqe for the MP.
-                                      // Could be assigned locally or from the MAc...
-  uint32_t index;                    // Which fields should we check? (2bytes == 32 bits)
-  char CI_ID[8];                      // Which CI                         512
-  u_int16_t VLAN_TCI;                 // VLAN id                          256
-  u_int16_t ETH_TYPE;                 // Ethernet type                    128
-  unsigned char ETH_SRC[6];           // Ethernet Source                  64
-  unsigned char ETH_DST[6];           // Ethernet Destination             32
-  u_int8_t IP_PROTO;                  // IP Payload Protocol              16
-  unsigned char IP_SRC[16];           // IP Source                        8
-  unsigned char IP_DST[16];           // IP Destination                   4
-  u_int16_t SRC_PORT;                 // Transport Source Port            2
-  u_int16_t DST_PORT;                 // Transport Destination Port       1 
-
-  u_int16_t VLAN_TCI_MASK;            // VLAN id mask                     
-  u_int16_t ETH_TYPE_MASK;            // Ethernet type mask               
-  unsigned char ETH_SRC_MASK[6];      // Ethernet Source Mask                  
-  unsigned char ETH_DST_MASK[6];      // Ethernet Destination Mask             
-  unsigned char IP_SRC_MASK[16];      // IP Source Mask                        
-  unsigned char IP_DST_MASK[16];      // IP Destination Mask                   
-  u_int16_t SRC_PORT_MASK;            // Transport Source Port Mask       
-  u_int16_t DST_PORT_MASK;            // Transport Destination Port Mask  
-  uint32_t consumer;                       // Destination Consumer
-  uint32_t CAPLEN;                         // Amount of data to capture. 
-  
-  unsigned char DESTADDR[22];          // Destination Address.
-  uint32_t DESTPORT;                        // Destination Port, used for udp and tcp sockets.
-  uint32_t TYPE;                           // Consumer Stream Type; 0-file, 1-ethernet multicast, 2-udp, 3-tcp
-} __attribute__((packed));
-
-/* Filter Structure */
-struct FPI{
-  struct filter filter;
-  struct FPI *next;                   // Next filter rule.
-};  
-
 char query[2000];
 MYSQL_RES *result;
 MYSQL_ROW row;
 MYSQL *connection, mysql;
 int state;
 
-
-/*-----------MP and MA communications structures */
-struct Generic {
-  int type;
-  char payload[1400];
-};
-
-struct MPinitialization {
-  int type; // Type of message (1). This is present in _ALL_ structures.
-  char mac[8]; // MAC address of MP.
-  char name[200]; // NAme of MP
-  uint8_t ipaddress[4]; // IP address
-  uint16_t port; // UDP port MP listens to.
-  uint16_t maxFilters; // Maximum number of filters.
-  uint16_t noCI; // Number of capture interfaces
-  char MAMPid[16]; // ID string provided by MArC.
-};
-
-struct MPstatus {
-  int type;       // Type of message (2). This is present in _ALL_ structures.
-  char MAMPid[16]; // Name of MP.
-  int noFilters; // Number of filters present on MP.
-  int matched; // Number of matched packets
-  int noCI;  // Number of CIs
-  char CIstats[1100]; // String specifying SI status. 
-};
-
-struct MPFilter{
-  uint32_t type;     // Type of message (3).
-  char MAMPid[16]; // Name of MP
-  struct filter theFilter; // Filter specification.
-};
-
-struct MPVerifyFilter{
-  int type;     // Type of message (6).
-  char MAMPid[16]; // Name of MP
-  int filter_id; // Requested filter. 
-  int flags; // 0 No filter present,i.e., no filter matched the requested id. 
-  struct FPI theFilter; // Filter specification.
-};
-
-
-
-/* ------------END COM. STRUCTS ------------------*/
-
-
-
-static void server(int sd,int c);
-void MP_Init(int sd, struct sockaddr from, char buffer[1500]);
+void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
 void MP_Status(int sd, struct sockaddr from, char buffer[1500]);
 void MP_GetFilter(int sd, struct sockaddr from, char buffer[1500]);
 void MP_VerifyFilter(int sd, struct sockaddr from, char buffer[1500]);
@@ -182,10 +99,8 @@ static void hexdump(FILE* fp, const char* data, size_t size){
 }
 
 int main(int argc, char *argv[]){
-  extern int optind, opterr, optopt;
+  extern int opterr, optopt;
   register int op;
-  int this_option_optind;
-  int nservers=3;
   int port;
   int option_index;
   int requiredARG=0;
@@ -209,16 +124,12 @@ int main(int argc, char *argv[]){
   bzero(user,64);
   bzero(password,64);
 
-  int sd;
-  struct sockaddr_in servAddr;
   opterr=0;
   optopt=0;
-  nservers=1;
 
 
   port=LOCAL_SERVER_PORT;
   for(;;) {
-    this_option_optind = optind ? optind : 1;
     option_index = 0;
     
     op = getopt_long  (argc, argv, "h:d:u:p:v",long_options, &option_index);
@@ -278,118 +189,85 @@ int main(int argc, char *argv[]){
     exit(1);
   }
 
-
-
-  /* socket creation */
-  sd=socket(AF_INET, SOCK_DGRAM, 0);
-  if(sd<0) {
-    printf("%s: cannot open socket \n",argv[0]);
-    exit(1);
+  int ret;
+  marc_context_t marc;
+  if ( (ret=marc_init_server(&marc, port)) != 0 ){
+    fprintf(stderr, "marc_init_server() returned %d: %s\n", ret, strerror(ret));
+    return 1;
   }
 
-  setsockopt(sd,SOL_SOCKET,SO_REUSEADDR,(void*)1,sizeof(int));
-  
-  /* bind local server port */
-  servAddr.sin_family = AF_INET;
-  servAddr.sin_addr.s_addr=0;
-  servAddr.sin_port = htons(port);
-
-  printf("Listens to %s:%d\n",inet_ntoa(servAddr.sin_addr),ntohs(servAddr.sin_port));
-  if( bind (sd, (struct sockaddr *) &servAddr,sizeof(servAddr))<0){
-    printf("%s: cannot bind port number %d \n", argv[0], port);
-    exit(1);
-  }
-
-  server(sd,0);
-  /*
-    // This is the forking part. Once server working, reuse it?
-  for(i=0;i<nservers;i++){
-    if(fork()==0){
-      server(sd,i);
-    }
-  }
-  
-  printf("%d servers forked on port %d.\n",nservers,port);
-  */
-  return 0;
-  
-}
-
-
-static void server(int sd,int servID){
-  char *messageBuffer;
-  char *replymsg;
-  messageBuffer=(char*)malloc(MAX_MSG);
-  replymsg=(char*)malloc(MAX_MSG);
-
-  struct Generic *msgPtr;
-
-  while(1){
+  while (1){
+    MPMessage event;
     struct sockaddr from;
-    socklen_t fromlen = sizeof(from);
-    int n = recvfrom(sd, messageBuffer, MAX_MSG, 0,&from, &fromlen);
-    printf("[%02d]--> \n",servID);
-    if(n<=0){
-      printf("Message length <=0.\n");
+    struct timeval timeout = {1, 0}; /* 1 sec timeout */
+    size_t bytes;
+    switch ( (ret=marc_poll_event(marc, &event, &bytes, &from, &timeout)) ){
+    case EAGAIN: /* delivered if using a timeout */
+    case EINTR:  /* interuped */
+      continue;
+      
+    case 0:
       break;
+      
+    default:
+      fprintf(stderr, "marc_poll_event() returned %d: %s\n", ret, strerror(ret));
+      return 1;
     }
-    printf(" Message (hex):\n");  
-      for(int i=0;i<10;i++){
-	printf("%02x",messageBuffer[i]);
-	if(messageBuffer[i]>0x31){
-	  printf("(%c) ",messageBuffer[i]);
-	} else {
-	  printf(" ");
-	}
-      }
-      printf("\n");
 
-      msgPtr=(struct Generic*)(messageBuffer);
-      printf("\nType  = %d \n", ntohl(msgPtr->type));
-      switch(ntohl(msgPtr->type)){
-      case 1:
-	MP_Init(sd, from, messageBuffer);
-	break;
-      case 2:
-	MP_Status(sd,from, messageBuffer);
-	break;
-      case 3:
-	MP_GetFilter(sd,from, messageBuffer);
-	break;
-      case 6:
-	MP_VerifyFilter(sd,from, messageBuffer);
-	break;
-
-      default:
-	printf("Unknown message.\n");
-	break;
-      }
-
+    switch ( event.type ){
+    case MP_CONTROL_INIT_EVENT:
+      MP_Init(marc, &event.init, &from);
+      break;
+    
+    default:
+      fprintf(stderr, "not handling message of type %d\n", event.type);
+    }
   }
-  exit(1);
 
+  return 0;
 }
 
 
-void MP_Init(int sd, struct sockaddr from, char *buffer){
-  int n,filters;
+      // msgPtr=(struct Generic*)(messageBuffer);
+      // printf("\nType  = %d \n", ntohl(msgPtr->type));
+      // switch(ntohl(msgPtr->type)){
+      // case 1:
+      // 	MP_Init(sd, from, messageBuffer);
+      // 	break;
+      // case 2:
+      // 	MP_Status(sd,from, messageBuffer);
+      // 	break;
+      // case 3:
+      // 	MP_GetFilter(sd,from, messageBuffer);
+      // 	break;
+      // case 6:
+      // 	MP_VerifyFilter(sd,from, messageBuffer);
+      // 	break;
+
+      // default:
+      // 	printf("Unknown message.\n");
+      // 	break;
+      // }
+
+void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* from){
+  int n;
   unsigned int k;
   k=0;
   char *MAMPid=0;
   struct sockaddr_in MPadr;
-  socklen_t fromlen = sizeof(from);
-  struct MPinitialization* MPinit;
   struct FPI *newRule,*listofFilters, *ptr;
+  struct MPauth MPauth;
   listofFilters=0;
   ptr=0;
 
-  MPinit=(struct MPinitialization*)buffer;
-  printf("%02x %02x %02x %02x .\n",buffer[0], buffer[1], buffer[2], buffer[3]);
+  MPauth.type = MP_CONTROL_AUTHORIZE_EVENT;
+  memset(MPauth.MAMPid, 0, 16);
+
   printf("MP init message. \n");
   printf("MPinit\n");
-  printf("      .type= %d \n",ntohl(MPinit->type));
+  printf("      .type= %d \n",MPinit->type);
   printf("      .mac = %s \n",hexdump_address(MPinit->mac));
-  printf("      .name= %s \n",MPinit->name);
+  printf("      .name= %s \n",MPinit->hostname);
   memcpy(&MPadr.sin_addr.s_addr, MPinit->ipaddress,sizeof(struct in_addr));
   printf("      .ipaddress = %s \n", inet_ntoa(MPadr.sin_addr));
   printf("      .port = %d \n", ntohs(MPinit->port));
@@ -398,59 +276,32 @@ void MP_Init(int sd, struct sockaddr from, char *buffer){
   printf("      .MAMPid = %s \n", MPinit->MAMPid);
 
   if ( mysql_ping(connection) != 0 ){
-    puts(mysql_error(connection));
+    fprintf(stderr, "Connection lost to mysql database: %s\n", mysql_error(connection));
     abort();
   }
 
-  sprintf(query, "SELECT * FROM measurementpoints WHERE mac='%s' AND name='%s'",hexdump_address(MPinit->mac),MPinit->name);
-  state=mysql_query(connection,query);
-  if(state != 0) {
-    puts(mysql_error(connection));
-    abort();
+  sprintf(query, "SELECT * FROM measurementpoints WHERE mac='%s' AND name='%s'",hexdump_address(MPinit->mac),MPinit->hostname);
+  if ( mysql_query(connection,query) != 0 ) {
+    fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
+    return;
   }
   
-  filters=0;
   result=mysql_store_result(connection);
   if(mysql_num_rows(result)==0){ /* We are a new MP..  */
     printf("This is an unregisterd MP.");
     mysql_free_result(result);
+
     sprintf(query, "INSERT INTO measurementpoints SET name='%s',ip='%s',port='%d',mac='%s',maxFilters=%d,noCI=%d"
-	    ,MPinit->name
+	    ,MPinit->hostname
 	    ,inet_ntoa(MPadr.sin_addr)
 	    ,ntohs(MPinit->port)
 	    ,hexdump_address((char*)MPinit->mac)
 	    ,ntohs(MPinit->maxFilters)
 	    ,ntohs(MPinit->noCI));
-    printf("Adding using this QUERY\n%s\n",query);
-    state=mysql_query(connection,query);
-    if(state != 0) {
-      puts(mysql_error(connection));
-      exit(1);
+    if ( mysql_query(connection,query) != 0 ) {
+      fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
+      return;
     }
-    printf("VERIFYING.\n");
-    state = mysql_query(connection,"SELECT name,ip,mac FROM measurementpoints");
-    if(state != 0) {
-      puts(mysql_error(connection));
-      exit(1);
-    }
-    /* must call mysql_store_results() */
-    result = mysql_store_result(connection);
-    printf("Rows: %d\n",(int)mysql_num_rows(result));
-    printf("Cols: %d\n",mysql_num_fields(result));
-    
-    /*process each row*/
-    while( (row=mysql_fetch_row(result)) != NULL ) {
-      for(k=0;k<mysql_num_fields(result);k++){
-	printf("%s\t",(row[k] ? row[k] : "NULL"));
-      }
-      printf("\n");
-    }
-    /* free the result set */
-    mysql_free_result(result);
-    /* close connection */
-    //    mysql_close(connection);
-    MPinit->MAMPid[0]='\0';
-    printf("Done.\n");
   } else {
     printf("The MP exists in MA.\n");
     row=mysql_fetch_row(result);
@@ -470,11 +321,9 @@ void MP_Init(int sd, struct sockaddr from, char *buffer){
 	exit(1);
       }
       /* must call mysql_store_results() */
-      int rows,cols;
+      int rows;
       result = mysql_store_result(connection);
       rows=(int)mysql_num_rows(result);
-      cols=(int)mysql_num_fields(result);
-      filters=rows;
       printf("We have %d filters waiting for us..\n",rows);
       
       
@@ -491,6 +340,7 @@ void MP_Init(int sd, struct sockaddr from, char *buffer){
      }
       /* free the result set */
       mysql_free_result(result);
+      memcpy(MPauth.MAMPid, MPinit->MAMPid, 16);
     } else {
       printf("However, it is not authorized.\n");
     }
@@ -502,33 +352,38 @@ void MP_Init(int sd, struct sockaddr from, char *buffer){
   }
   printf("Sending Resonse to MP_init.\n");
   printf("type = %d \n",ntohl(MPinit->type));
-  n=sendto(sd,MPinit,sizeof(struct MPinitialization),0,&from,fromlen);
-  printf("Sent %d bytes.\n",n);
+
+  int ret;
+  if ( (ret=marc_push_event(marc, (MPMessage*)&MPauth, from)) != 0 ){
+    fprintf(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+    return;
+  }
 
   if(listofFilters!=0) {
     printf("There are filters destined for the MP.\n");
-    struct MPFilter *filter=(struct MPFilter*)calloc(1,sizeof(struct MPFilter));
-    filter->type=htonl(3); // 3 == 51 in ASCII  
-    sprintf(filter->MAMPid,"%s",MAMPid);
-    ptr=listofFilters;
-    printf("MPFilter.type   = %d\n",ntohl(filter->type));
-    printf("MPFilter.MAMPid = %s\n",filter->MAMPid);
-	   
-    while(ptr!=0){
-      printf("ptr %p --> %p \n", ptr,ptr->next);
-
+    struct MPFilter MPfilter;
+    MPfilter.type = MP_FILTER_EVENT;
+    sprintf(MPfilter.MAMPid,"%s", MAMPid);
+    printf("MPFilter.type   = %d\n", MPfilter.type);
+    printf("MPFilter.MAMPid = %s\n", MPfilter.MAMPid);
+    
+    struct FPI* cur = listofFilters;
+    while ( cur ){
       printf("Sending this filter.\n");
-      printf("filter.id = %d\n",ptr->filter.filter_id);
-      //      printFilter(ptr);
-      memcpy(&filter->theFilter, &ptr->filter, sizeof(struct filter));
+      printf("filter.id = %d\n", cur->filter.filter_id);
+
+      marc_filter_pack(&cur->filter, &MPfilter.filter);
       
       printf("Sending Filter to to MP.\n");
-      printf("MPFilter: %zd FPI: %zd\n", sizeof(struct MPFilter), sizeof(struct filter));
-      hexdump(stdout, (char*)filter, sizeof(struct MPFilter));
-      n=sendto(sd,filter, sizeof(struct MPFilter),0,&from,fromlen);
-      printf("Sent %d bytes.\n",n);
-      ptr=ptr->next;
-   
+      printf("MPFilter: %zd FPI: %zd\n", sizeof(struct MPFilter), sizeof(struct FilterPacked));
+      hexdump(stdout, (char*)&MPfilter, sizeof(struct MPFilter));
+
+      if ( (ret=marc_push_event(marc, (MPMessage*)&MPfilter, from)) != 0 ){
+	fprintf(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+	return;
+      }
+
+      cur = cur->next;   
     }
     ptr=listofFilters;
     while(ptr!=0){
@@ -536,7 +391,6 @@ void MP_Init(int sd, struct sockaddr from, char *buffer){
 	ptr=ptr->next;
 	free(newRule);
     }	
-    free(filter);
   
   } else {
     printf("No filters found for the MP.\n");
@@ -572,7 +426,7 @@ void MP_GetFilter(int sd, struct sockaddr from, char *buffer){
   query=statusQ;
   bzero(statusQ,sizeof(statusQ));
   struct MPFilter* filter=(struct MPFilter*)buffer;
-  sprintf(statusQ,"SELECT * FROM %s_filterlist WHERE filter_id='%d'",filter->MAMPid,filter->theFilter.filter_id);  
+  sprintf(statusQ,"SELECT * FROM %s_filterlist WHERE filter_id='%d'",filter->MAMPid,filter->filter.filter_id);
 
   printf("MP_GetFilter():\n%s\n",query);
   state=mysql_query(connection,query);
@@ -585,7 +439,7 @@ void MP_GetFilter(int sd, struct sockaddr from, char *buffer){
   convMySQLtoFPI(newRule,result);
   printf("Sending this filter.\n");
   printFilter(newRule);
-  memcpy(&filter->theFilter,&newRule->filter,sizeof(struct filter));
+  memcpy(&filter->filter,&newRule->filter,sizeof(struct FilterPacked));
 
   printf("Sending Resonse to MP_init. foo\n");
   hexdump(stdout, (const char*)filter, sizeof(struct MPFilter));
@@ -603,19 +457,17 @@ void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
   query=statusQ;
   bzero(statusQ,sizeof(statusQ));
   struct MPVerifyFilter* MyVerify=(struct MPVerifyFilter*)buffer;
-  struct FPI* fpi;
-  fpi=&MyVerify->theFilter;
-  struct filter* F = &fpi->filter;
+  struct FilterPacked* F = &MyVerify->filter;
   if(MyVerify->flags==0) {
     sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', comment='NOT PRESENT'", MyVerify->MAMPid,MyVerify->filter_id); 
   } else {
     sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', ind='%d', CI_ID='%s', VLAN_TCI='%d', VLAN_TCI_MASK='%d',ETH_TYPE='%d', ETH_TYPE_MASK='%d',ETH_SRC='%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X',ETH_SRC_MASK='%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X', ETH_DST='%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X', ETH_DST_MASK='%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X',IP_PROTO='%d', IP_SRC='%s', IP_SRC_MASK='%s', IP_DST='%s', IP_DST_MASK='%s', SRC_PORT='%d', SRC_PORT_MASK='%d', DST_PORT='%d', DST_PORT_MASK='%d', TYPE='%d', CAPLEN='%d', consumer='%d'",
 	    MyVerify->MAMPid,F->filter_id,F->index,F->CI_ID,F->VLAN_TCI,F->VLAN_TCI_MASK,
 	    F->ETH_TYPE,F->ETH_TYPE_MASK, 
-	    (unsigned char)(F->ETH_SRC[0]),(unsigned char)(F->ETH_SRC[1]),(unsigned char)(F->ETH_SRC[2]),(unsigned char)(F->ETH_SRC[3]),(unsigned char)(F->ETH_SRC[4]),(unsigned char)(F->ETH_SRC[5]),
+	    (unsigned char)(F->ETH_SRC.ether_addr_octet[0]),(unsigned char)(F->ETH_SRC.ether_addr_octet[1]),(unsigned char)(F->ETH_SRC.ether_addr_octet[2]),(unsigned char)(F->ETH_SRC.ether_addr_octet[3]),(unsigned char)(F->ETH_SRC.ether_addr_octet[4]),(unsigned char)(F->ETH_SRC.ether_addr_octet[5]),
 	    (unsigned char)(F->ETH_SRC_MASK[0]),(unsigned char)(F->ETH_SRC_MASK[1]),(unsigned char)(F->ETH_SRC_MASK[2]),(unsigned char)(F->ETH_SRC_MASK[3]),(unsigned char)(F->ETH_SRC_MASK[4]),(unsigned char)(F->ETH_SRC_MASK[5]),
 
-	    (unsigned char)(F->ETH_DST[0]),(unsigned char)(F->ETH_DST[1]),(unsigned char)(F->ETH_DST[2]),(unsigned char)(F->ETH_DST[3]),(unsigned char)(F->ETH_DST[4]),(unsigned char)(F->ETH_DST[5]),
+	    (unsigned char)(F->ETH_DST.ether_addr_octet[0]),(unsigned char)(F->ETH_DST.ether_addr_octet[1]),(unsigned char)(F->ETH_DST.ether_addr_octet[2]),(unsigned char)(F->ETH_DST.ether_addr_octet[3]),(unsigned char)(F->ETH_DST.ether_addr_octet[4]),(unsigned char)(F->ETH_DST.ether_addr_octet[5]),
 	    (unsigned char)(F->ETH_DST_MASK[0]),(unsigned char)(F->ETH_DST_MASK[1]),(unsigned char)(F->ETH_DST_MASK[2]),(unsigned char)(F->ETH_DST_MASK[3]),(unsigned char)(F->ETH_DST_MASK[4]),(unsigned char)(F->ETH_DST_MASK[5]),
 	    F->IP_PROTO,
 	    F->IP_SRC,F->IP_SRC_MASK,F->IP_DST,F->IP_DST_MASK,
@@ -653,7 +505,7 @@ char *hexdump_address (char address[IFHWADDRLEN]){
 
 
 int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
-  struct filter* rule = &fpi->filter;
+  struct Filter* rule = &fpi->filter;
 
   char *pos=0;
   MYSQL_ROW row;  
@@ -679,9 +531,9 @@ int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
   rule->DST_PORT_MASK=atoi(row[19]);
   rule->consumer=atoi(row[20]);
   
-  inet_atoP((char*)rule->ETH_SRC,row[7]);
+  inet_atoP((char*)rule->ETH_SRC.ether_addr_octet,row[7]);
   inet_atoP((char*)rule->ETH_SRC_MASK,row[8]);
-  inet_atoP((char*)rule->ETH_DST,row[9]);
+  inet_atoP((char*)rule->ETH_DST.ether_addr_octet,row[9]);
   inet_atoP((char*)rule->ETH_DST_MASK,row[10]);
 
   rule->TYPE=atoi(row[22]);
@@ -715,8 +567,6 @@ int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
 /* Convert a string ip with dotted decimal to a hexc.. */
 int inet_atoP(char *dest,char *org){
   char tmp[3];
-  char *ptr;
-  ptr=tmp;
   tmp[2]='\0';
   int j,k;
   j=k=0;
@@ -733,8 +583,6 @@ int inet_atoP(char *dest,char *org){
 /* Convert a string Ethernet to hex. */
 int inet_aEtoP(char *dest,char *org){
   char tmp[3];
-  char *ptr;
-  ptr=tmp;
   tmp[2]='\0';
   int j,k;
   j=k=0;
@@ -751,7 +599,7 @@ int inet_aEtoP(char *dest,char *org){
 
 
 void printFilter(struct FPI *fpi){
-  struct filter* F = &fpi->filter;
+  struct Filter* F = &fpi->filter;
   printf("CTRL PRINT FILTER\n");
   printf("filter_id    :%d\n",F->filter_id);
   printf("consumer     :%d\n",F->consumer);
@@ -796,7 +644,7 @@ void printFilter(struct FPI *fpi){
   
   printf("ETH_SRC      :");
   if(F->index&64){
-    printf("%s\n",hexdump_address((char*)F->ETH_SRC));
+    printf("%s\n",hexdump_address((char*)F->ETH_SRC.ether_addr_octet));
     printf("ETH_SRC_MASK :%s\n",hexdump_address((char*)F->ETH_SRC_MASK));
   } else {
     printf("NULL\n");
@@ -805,7 +653,7 @@ void printFilter(struct FPI *fpi){
 
   printf("ETH_DST      :");
   if(F->index&32){
-    printf("%s\n",(char*)F->ETH_DST);
+    printf("%s\n",(char*)F->ETH_DST.ether_addr_octet);
     printf("ETH_DST_MASK:%s\n",F->ETH_DST_MASK);
   } else {
     printf("NULL\n");

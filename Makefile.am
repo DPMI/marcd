@@ -1,0 +1,7 @@
+ACLOCAL_AMFLAGS = -I m4
+
+bin_PROGRAMS = MArCd
+
+MArCd_CXXFLAGS = -Wall ${MYSQL_CLIENT_CFLAGS} ${libmarc_CFLAGS}
+MArCd_LDADD = ${MYSQL_CLIENT_LIBS} ${libmarc_LIBS}
+MArCd_SOURCES = main.cpp
