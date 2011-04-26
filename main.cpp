@@ -250,20 +250,13 @@ int main(int argc, char *argv[]){
       // }
 
 void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* from){
-  int n;
-  unsigned int k;
-  k=0;
-  char *MAMPid=0;
   struct sockaddr_in MPadr;
-  struct FPI *newRule,*listofFilters, *ptr;
   struct MPauth MPauth;
-  listofFilters=0;
-  ptr=0;
+  int ret;
 
   MPauth.type = MP_CONTROL_AUTHORIZE_EVENT;
   memset(MPauth.MAMPid, 0, 16);
 
-  printf("MP init message. \n");
   printf("MPinit\n");
   printf("      .type= %d \n",MPinit->type);
   printf("      .mac = %s \n",hexdump_address(MPinit->mac));
@@ -280,7 +273,7 @@ void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* fro
     abort();
   }
 
-  sprintf(query, "SELECT * FROM measurementpoints WHERE mac='%s' AND name='%s'",hexdump_address(MPinit->mac),MPinit->hostname);
+  sprintf(query, "SELECT MAMPid FROM measurementpoints WHERE mac='%s' AND name='%s'",hexdump_address(MPinit->mac),MPinit->hostname);
   if ( mysql_query(connection,query) != 0 ) {
     fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
     return;
@@ -302,99 +295,63 @@ void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* fro
       fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
       return;
     }
-  } else {
-    printf("The MP exists in MA.\n");
-    row=mysql_fetch_row(result);
-    MAMPid=(char*)malloc(strlen(row[7]));
-    strcpy(MAMPid,row[7]);
-    strcpy(MPinit->MAMPid,MAMPid);
-    mysql_free_result(result);
-    printf("MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
-    if(strlen(MAMPid)!=0){ // The MP exists, but isnt authorized.
-      /* Lets check if we have any filters waiting for us? */
-      printf("Checking for filters, %s_filterlist.\n",MAMPid);
-      sprintf(query, "SELECT * from %s_filterlist ORDER BY 'filter_id' ASC ",MAMPid);
-      printf("SQL : %s \n", query);
-      state=mysql_query(connection,query);
-      if(state != 0) {
-	puts(mysql_error(connection));
-	exit(1);
-      }
-      /* must call mysql_store_results() */
-      int rows;
-      result = mysql_store_result(connection);
-      rows=(int)mysql_num_rows(result);
-      printf("We have %d filters waiting for us..\n",rows);
-      
-      
-      /*process each row*/
 
-      listofFilters=0;
-      for(n=0;n<rows;n++){
-	newRule=(struct FPI*)calloc(1, sizeof(struct FPI));
-	newRule->next=listofFilters;
-	convMySQLtoFPI(newRule,result);
-	//printFilter(newRule);
-        listofFilters=newRule;
-
-     }
-      /* free the result set */
-      mysql_free_result(result);
-      memcpy(MPauth.MAMPid, MPinit->MAMPid, 16);
-    } else {
-      printf("However, it is not authorized.\n");
-    }
+    return;
   }
-  ptr=listofFilters;
-  while(ptr!=0){
-	printf("ptr (%d) %p --> %p \n", ptr->filter.filter_id, ptr,ptr->next);
-	ptr=ptr->next;
-  }
-  printf("Sending Resonse to MP_init.\n");
-  printf("type = %d \n",ntohl(MPinit->type));
 
-  int ret;
+  char MAMPid[16];
+  row = mysql_fetch_row(result);
+  strncpy(MAMPid, row[0], 16);
+  mysql_free_result(result);
+
+  printf("MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
+  memcpy(MPauth.MAMPid, MAMPid, 16);
+
+  /* Authorize */
   if ( (ret=marc_push_event(marc, (MPMessage*)&MPauth, from)) != 0 ){
     fprintf(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
     return;
   }
 
-  if(listofFilters!=0) {
-    printf("There are filters destined for the MP.\n");
-    struct MPFilter MPfilter;
-    MPfilter.type = MP_FILTER_EVENT;
-    sprintf(MPfilter.MAMPid,"%s", MAMPid);
-    printf("MPFilter.type   = %d\n", MPfilter.type);
-    printf("MPFilter.MAMPid = %s\n", MPfilter.MAMPid);
-    
-    struct FPI* cur = listofFilters;
-    while ( cur ){
-      printf("Sending this filter.\n");
-      printf("filter.id = %d\n", cur->filter.filter_id);
-
-      marc_filter_pack(&cur->filter, &MPfilter.filter);
-      
-      printf("Sending Filter to to MP.\n");
-      printf("MPFilter: %zd FPI: %zd\n", sizeof(struct MPFilter), sizeof(struct FilterPacked));
-      hexdump(stdout, (char*)&MPfilter, sizeof(struct MPFilter));
-
-      if ( (ret=marc_push_event(marc, (MPMessage*)&MPfilter, from)) != 0 ){
-	fprintf(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
-	return;
-      }
-
-      cur = cur->next;   
-    }
-    ptr=listofFilters;
-    while(ptr!=0){
-	newRule=ptr;
-	ptr=ptr->next;
-	free(newRule);
-    }	
-  
-  } else {
-    printf("No filters found for the MP.\n");
+  if( strlen(MAMPid) == 0){ // The MP exists, but isnt authorized.
+    return;
   }
+
+  /* Lets check if we have any filters waiting for us? */
+  sprintf(query, "SELECT * from %s_filterlist ORDER BY 'filter_id' ASC ",MAMPid);
+  if ( mysql_query(connection,query) != 0 ) {
+    fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
+    return;
+  }
+
+  result = mysql_store_result(connection);
+  int rows = (int)mysql_num_rows(result);
+  printf("MP %s has %d filters assigned.\n", MAMPid, rows);
+  
+  /*process each row*/  
+  for( int n=0; n < rows; n++ ){
+    struct FPI fpi;
+    struct MPFilter MPfilter;
+
+    convMySQLtoFPI(&fpi, result);
+    struct Filter* filter = &fpi.filter;
+      
+    MPfilter.type = MP_FILTER_EVENT;
+    sprintf(MPfilter.MAMPid, "%s", MAMPid);
+    marc_filter_pack(filter, &MPfilter.filter);
+      
+    printf("Sending Filter %d to to MP %s.\n", filter->filter_id, MPfilter.MAMPid);
+    hexdump(stdout, (char*)&MPfilter, sizeof(struct MPFilter));
+
+    if ( (ret=marc_push_event(marc, (MPMessage*)&MPfilter, from)) != 0 ){
+      fprintf(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+      return;
+    }    
+  }
+
+  /* free the result set */
+  mysql_free_result(result);
+
   printf("MP_init done.\n");
   return;
 }
