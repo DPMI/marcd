@@ -25,91 +25,62 @@
 #include <libmarc/log.h>
 #include <libmarc/version.h>
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <time.h>
-#include <ctime>
-#include <sys/time.h>
-#include <csignal>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <stdio.h>
-#include <unistd.h> /* close() */
-#include <string.h> /* memset() */
-#include <stdlib.h>
-#include <iostream>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <getopt.h>
 #include <errno.h>
-
+ 
 #include <mysql.h>
-#include <strings.h>
-#define IFHWADDRLEN 6
-#define MAX_MSG 1500
+#include <errmsg.h> /* from mysql */
+
 #define LOCAL_SERVER_PORT 1600;
-#define ETH_ALEN 6
+#define LOG_EVENT(x) \
+  logmsg(verbose, x " from %s:%d\n", inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port))
 
-int convMySQLtoFPI(struct FPI *rule,  MYSQL_RES *result);// 
-static char hex_string[IFHWADDRLEN * 3] = "00:00:00:00:00:00";
+static MYSQL connection;
+static char db_hostname[64] = "localhost";
+static int  db_port = MYSQL_PORT;
+static char db_name[64] = {0,};
+static char db_username[64] = {0,};
+static char db_password[64] = {0,};
 
-char query[2000];
-MYSQL_RES *result;
-MYSQL_ROW row;
-MYSQL *connection, mysql;
-int state;
+static int verbose_flag = 0;
+static int debug_flag = 0;
+static FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
+ 
+static void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
+static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from);
+static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from);
+static void MP_VerifyFilter(int sd, struct sockaddr from, char buffer[1500]);
 
-int verbose_flag = 0;
-FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
-
-void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
-void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from);
-void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from);
-void MP_VerifyFilter(int sd, struct sockaddr from, char buffer[1500]);
-
-char *hexdump_address (const struct ether_addr* addr);
-static char *hexdump_address_r (const struct ether_addr* address, char buf[IFHWADDRLEN*3]);
-
-int convMySQLtoFPI(struct FPI *rule,  MYSQL_RES *result);
-int inet_atoP(char *dest,char *org);
-int inet_aEtoP(char *dest,char *org);
+static int connect();
+static int convMySQLtoFPI(struct FPI *rule,  MYSQL_RES *result);
+static int inet_atoP(char *dest,char *org);
 
 int main(int argc, char *argv[]){
   extern int opterr, optopt;
-  register int op;
-  int port;
-  int option_index;
-  int requiredARG=0;
+  int port = LOCAL_SERVER_PORT;
   static struct option long_options[]= {
     {"help", 0, 0, 'v'},
     {"host",1,0,'h'},
-    {"database",1,0,'d'},
+    {"database",1,0, 'd'},
     {"user",1,0,'u'},
     {"password",1,0,'p'},
     {"verbose", 0, &verbose_flag, 1},
+    {"debug", 0, &debug_flag, 1},
     {0, 0, 0, 0}
   };
   
-  char host_address[16];
-  int db_port=MYSQL_PORT;
-  char database[64];
-  char user[64];
-  char password[64];
-
-  bzero(host_address,16);
-  bzero(database,64);
-  bzero(user,64);
-  bzero(password,64);
-
   opterr=0;
   optopt=0;
 
   printf("MArCd " VERSION " (libmarc-" LIBMARC_VERSION ")\n");
 
-  port=LOCAL_SERVER_PORT;
   for(;;) {
-    option_index = 0;
+    int option_index = 0;
     
-    op = getopt_long  (argc, argv, "h:d:u:p:v",long_options, &option_index);
+    int op = getopt_long  (argc, argv, "h:u:p:v", long_options, &option_index);
     if (op == -1)
       break;
     
@@ -119,41 +90,65 @@ int main(int argc, char *argv[]){
 
     case 'v':
       printf("(C) 2004 patrik.arlos@bth.se\n");
-      printf("(C) 2011 david.sveningsson@bth.se\n"),
-	printf("Usage: %s -d NAME -u USER [OPTIONS]\n",argv[0]);
-	printf("  -h, --host      MySQL database host. [Default: localhost]\n");
-	printf("  -d, --database  Database name.\n");
-	printf("  -u, --user      Database username.\n");
-	printf("  -p, --password  Database password, use '-' to read password\n"
-	       "                  from stdin. [Default: none]\n");
-	printf("      --verbose   Verbose output.\n");
-	printf("      --help      This text\n");
-	exit(0);
-	break;	
+      printf("(C) 2011 david.sveningsson@bth.se\n");
+      printf("Usage: %s [OPTIONS] DATABASE\n",argv[0]);
+      printf("  -h, --host      MySQL database host. [Default: localhost]\n");
+      printf("      --database  Database name.\n");
+      printf("  -u, --user      Database username. [Default: current user]\n");
+      printf("  -p, --password  Database password, use '-' to read password\n"
+	     "                  from stdin. [Default: none]\n");
+      printf("      --verbose   Verbose output.\n");
+      printf("      --debug     Show extra debugging output, including hexdump\n"
+	     "                  of all incomming and outgoing messages. Implies\n"
+	     "                  verbose output.\n");
+      printf("      --help      This text\n");
+      return 0;
+      break;
+
     case 'h':
-      memcpy(host_address,optarg,strlen(optarg));
-      requiredARG++;
-      printf("DB ip = %s / %zd - %zd.\n",host_address,strlen(optarg),strlen(host_address) );
+      strncpy(db_hostname, optarg, sizeof(db_hostname));
+      db_hostname[sizeof(db_hostname)-1] = '\0';
       break;
+
     case 'd':
-      memcpy(database,optarg,strlen(optarg));
-      requiredARG++;
-      printf("DB database = %s.\n",database);
+      strncpy(db_name, optarg, sizeof(db_name));
+      db_name[sizeof(db_name)-1] = '\0';
       break;
+
     case 'u':
-      memcpy(user,optarg,strlen(optarg));
-      requiredARG++;
-      printf("DB username = %s.\n",user);
+      strncpy(db_username, optarg, sizeof(db_username));
+      db_username[sizeof(db_username)-1] = '\0';
       break;
+
     case 'p':
-      memcpy(password,optarg,strlen(optarg));
-      requiredARG++;
-      printf("DB password = %s.\n",password);
+      if ( strcmp(optarg, "-") == 0 ){ /* read password from stdin */
+	fscanf(stdin, "%63s", db_password);
+      } else {
+	strncpy(db_password, optarg, sizeof(db_password));
+	db_password[sizeof(db_password)-1] = '\0';
+      }
       break;
+
     default:
-      printf ("?? getopt returned character code 0%o ??\n", op);
+      fprintf(stderr, "?? getopt returned character code 0%o ??\n", op);
+      abort();
     }
   }
+
+  /* database */
+  if ( argc > optind ){
+    strncpy(db_name, argv[optind], sizeof(db_name));
+    db_name[sizeof(db_name)-1] = '\0';
+  }
+
+  /* sanity checks */
+  if ( db_name[0] == 0 ){
+    fprintf(stderr, "No database specified.\n");
+    return 1;
+  }
+
+  /* force verbose if debug is enabled */
+  verbose_flag |= debug_flag;
 
   /* setup vfp to stdout or /dev/null depending on verbose flag */
   verbose = stdout;
@@ -161,30 +156,24 @@ int main(int argc, char *argv[]){
     verbose = fopen("/dev/null", "w");
   }
 
-  /*
-    
-  if(requiredARG<4){
-    printf("You must supply a database info..\n");
-    exit(1);
-  }
-  */
+  /* redirect output */
+  marc_set_output_handler(logmsg, vlogmsg, stderr, verbose);
 
-  printf("MySQL: %s:%d (%s/%s) Database %s.\n",host_address,db_port,user,password,database);
-  mysql_init(&mysql);
-  connection = mysql_real_connect(&mysql, host_address, user, password, database,db_port,0,0);
-  /* check connection */
-  if( connection == NULL) {
-    puts(mysql_error(&mysql));
-    exit(1);
-  }
-
-  int ret;
-  marc_context_t marc;
-  if ( (ret=marc_init_server(&marc, port)) != 0 ){
-    fprintf(stderr, "marc_init_server() returned %d: %s\n", ret, strerror(ret));
+  /* initialize mysql */
+  mysql_init(&connection);
+  if ( !connect() ){
     return 1;
   }
 
+  /* initialize libmarc */
+  int ret;
+  marc_context_t marc;
+  if ( (ret=marc_init_server(&marc, port)) != 0 ){
+    logmsg(stderr, "marc_init_server() returned %d: %s\n", ret, strerror(ret));
+    return 1;
+  }
+
+  /* wait for events */
   while (1){
     MPMessage event;
     struct sockaddr from;
@@ -199,8 +188,13 @@ int main(int argc, char *argv[]){
       break;
       
     default:
-      fprintf(stderr, "marc_poll_event() returned %d: %s\n", ret, strerror(ret));
+      logmsg(stderr, "marc_poll_event() returned %d: %s\n", ret, strerror(ret));
       return 1;
+    }
+
+    if ( debug_flag ){
+      logmsg(verbose, "Received event of type %d (%zd bytes)\n", event.type, bytes);
+      hexdump(verbose, (const char*)&event, bytes);
     }
 
     switch ( event.type ){
@@ -217,7 +211,7 @@ int main(int argc, char *argv[]){
       break;
 
     default:
-      fprintf(stderr, "not handling message of type %d\n", event.type);
+      logmsg(stderr, "not handling message of type %d\n", event.type);
     }
   }
 
@@ -240,6 +234,17 @@ int main(int argc, char *argv[]){
       // 	break;
       // }
 
+static int connect(){
+  logmsg(verbose, "Connecting to mysql://%s@%s:%d/%s (using password: %s)\n",
+	 db_username, db_hostname, db_port, db_name, db_password[0] != 0 ? "YES" : "NO");
+  if ( !mysql_real_connect(&connection, db_hostname, db_username, db_password, db_name,db_port,0,0) ){
+    logmsg(stderr, "Failed to connect to database: %s\n", mysql_error(&connection));
+    return 0;
+  }
+  return 1;
+}
+
+
 /**
  * Fetches a row from the MySQL resultset, parses it and sends it as a packed filter to dst
  * @return Zero on error.
@@ -258,19 +263,58 @@ static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sock
   sprintf(MPfilter.MAMPid, "%s", MAMPid);
   marc_filter_pack(filter, &MPfilter.filter);
   
-  printf("Sending Filter {%d} to to MP %s.\n", filter->filter_id, MPfilter.MAMPid);
-  hexdump(stdout, (char*)&MPfilter, sizeof(struct MPFilter));
+  logmsg(verbose, "Sending Filter {%d} to to MP %s.\n", filter->filter_id, MPfilter.MAMPid);
+
+  if ( debug_flag ){
+    hexdump(verbose, (char*)&MPfilter, sizeof(struct MPFilter));
+  }
   
   int ret;
   if ( (ret=marc_push_event(marc, (MPMessage*)&MPfilter, dst)) != 0 ){
-    fprintf(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+    logmsg(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
     return 0;
   }
 
   return 1;
 }
 
-void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* from){
+static int q(const char* sql, ...){
+  char query[2000] = {0,};
+
+  va_list ap;
+  va_start(ap, sql);
+  vsnprintf(query, sizeof(query), sql, ap);
+  va_end(ap);
+
+  int ret;
+  if ( (ret=mysql_ping(&connection)) != 0 ){
+    switch (ret){
+    case CR_SERVER_GONE_ERROR:
+      if ( !connect() ){
+	return 0;
+      }
+      break;
+
+    default:
+      logmsg(stderr, "Connection to MySQL lost: %s\n", mysql_error(&connection));
+      return 0;
+    }
+  }
+
+  if ( debug_flag ){
+    logmsg(verbose, "Executing SQL query:\n%s\n", query);
+  }
+
+  if ( mysql_query(&connection,query) != 0 ) {
+    logmsg(stderr, "Failed to execute MySQL query: %s\nThe query was: %s\n", mysql_error(&connection), query);
+    return 0;
+  }
+
+  return 1;
+}
+
+static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* from){
+  LOG_EVENT("MPinitialization");
   struct sockaddr_in MPadr;
   struct MPauth MPauth;
   int ret;
@@ -278,76 +322,71 @@ void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* fro
   MPauth.type = MP_CONTROL_AUTHORIZE_EVENT;
   memset(MPauth.MAMPid, 0, 16);
 
-  printf("MPinit\n");
-  printf("      .type= %d \n",MPinit->type);
-  printf("      .mac = %s \n", hexdump_address(&MPinit->hwaddr));
-  printf("      .name= %s \n",MPinit->hostname);
   memcpy(&MPadr.sin_addr.s_addr, MPinit->ipaddress,sizeof(struct in_addr));
-  printf("      .ipaddress = %s \n", inet_ntoa(MPadr.sin_addr));
-  printf("      .port = %d \n", ntohs(MPinit->port));
-  printf("      .maxFilters = %d \n",ntohs(MPinit->maxFilters));
-  printf("      .noCI = %d \n", ntohs(MPinit->noCI));
-  printf("      .MAMPid = %s \n", MPinit->MAMPid);
 
-  if ( mysql_ping(connection) != 0 ){
-    fprintf(stderr, "Connection lost to mysql database: %s\n", mysql_error(connection));
-    abort();
-  }
-
-  sprintf(query, "SELECT MAMPid FROM measurementpoints WHERE mac='%s' AND name='%s'", hexdump_address(&MPinit->hwaddr), MPinit->hostname);
-  if ( mysql_query(connection,query) != 0 ) {
-    fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
+  logmsg(verbose, "MPinitialization:\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
+  logmsg(verbose, "      .type= %d \n",MPinit->type);
+  logmsg(verbose, "      .mac = %s \n", hexdump_address(&MPinit->hwaddr));
+  logmsg(verbose, "      .name= %s \n",MPinit->hostname);
+  logmsg(verbose, "      .ipaddress = %s \n", inet_ntoa(MPadr.sin_addr));
+  logmsg(verbose, "      .port = %d \n", ntohs(MPinit->port));
+  logmsg(verbose, "      .maxFilters = %d \n",ntohs(MPinit->maxFilters));
+  logmsg(verbose, "      .noCI = %d \n", ntohs(MPinit->noCI));
+  logmsg(verbose, "      .MAMPid = %s \n", MPinit->MAMPid);
+  
+  if ( !q("SELECT MAMPid FROM measurementpoints WHERE mac='%s' AND name='%s'", hexdump_address(&MPinit->hwaddr), MPinit->hostname) ){
     return;
   }
   
-  result=mysql_store_result(connection);
+  MYSQL_RES* result = mysql_store_result(&connection);
   if(mysql_num_rows(result)==0){ /* We are a new MP..  */
-    printf("This is an unregisterd MP.");
+    logmsg(stderr, "This is an unregisterd MP.");
     mysql_free_result(result);
 
-    sprintf(query, "INSERT INTO measurementpoints SET name='%s',ip='%s',port='%d',mac='%s',maxFilters=%d,noCI=%d"
+    if ( !q("INSERT INTO measurementpoints SET name='%s',ip='%s',port='%d',mac='%s',maxFilters=%d,noCI=%d"
 	    ,MPinit->hostname
 	    ,inet_ntoa(MPadr.sin_addr)
 	    ,ntohs(MPinit->port)
 	    ,hexdump_address(&MPinit->hwaddr)
 	    ,ntohs(MPinit->maxFilters)
-	    ,ntohs(MPinit->noCI));
-    if ( mysql_query(connection,query) != 0 ) {
-      fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
+	    ,ntohs(MPinit->noCI)) ){
       return;
     }
-
-    return;
   }
 
   char MAMPid[16];
-  row = mysql_fetch_row(result);
+  MYSQL_ROW row = mysql_fetch_row(result);
   strncpy(MAMPid, row[0], 16);
   mysql_free_result(result);
 
-  printf("MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
+  logmsg(verbose, "MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
   memcpy(MPauth.MAMPid, MAMPid, 16);
 
-  /* Authorize */
+  /* Send authorize message (telling whenever it is authorized or not) */
   if ( (ret=marc_push_event(marc, (MPMessage*)&MPauth, from)) != 0 ){
-    fprintf(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+    logmsg(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
     return;
   }
 
   if( strlen(MAMPid) == 0){ // The MP exists, but isnt authorized.
+    if ( !verbose_flag ){
+      logmsg(stderr, "MPinitialization request from %s:%d -> not authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
+    } else {
+      logmsg(verbose, "This MP exists but is not yet authorized.");
+    }
     return;
+  } else if (!verbose_flag){
+    logmsg(stderr, "MPinitialization request from %s:%d -> authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
   }
 
   /* Lets check if we have any filters waiting for us? */
-  sprintf(query, "SELECT * from %s_filterlist ORDER BY 'filter_id' ASC ",MAMPid);
-  if ( mysql_query(connection,query) != 0 ) {
-    fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
+  if ( !q("SELECT * from %s_filterlist ORDER BY 'filter_id' ASC ",MAMPid) ){
     return;
   }
 
-  result = mysql_store_result(connection);
+  result = mysql_store_result(&connection);
   int rows = (int)mysql_num_rows(result);
-  printf("MP %s has %d filters assigned.\n", MAMPid, rows);
+  logmsg(verbose, "MP %s has %d filters assigned.\n", MAMPid, rows);
   
   /*process each row*/  
   for( int n=0; n < rows; n++ ){
@@ -357,50 +396,40 @@ void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* fro
   /* free the result set */
   mysql_free_result(result);
 
-  printf("MP_init done.\n");
+  logmsg(verbose, "MP_init done.\n");
   return;
 }
 
-void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from){
-  char query[2000] = {0,};
-  sprintf(query, "INSERT INTO %s_CIload SET noFilters='%d', matchedPkts='%d' %s",
-	  MPstat->MAMPid, ntohl(MPstat->noFilters), ntohl(MPstat->matched), MPstat->CIstats);
+static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from){
+  LOG_EVENT("MPstatus");
 
-  printf("MP_status():\n%s\n",query);
-  if ( mysql_query(connection, query) != 0 ) {
-    fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
-    return;
-  }
-  printf("Status added to Database.\n");
-  return;
+  q("INSERT INTO %s_CIload SET noFilters='%d', matchedPkts='%d' %s",
+    MPstat->MAMPid, ntohl(MPstat->noFilters), ntohl(MPstat->matched), MPstat->CIstats);
 }
 
 
-void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from){
-  char query[2000] = {0,};
-  sprintf(query, "SELECT * FROM %s_filterlist WHERE filter_id='%d' LIMIT 1",
-	  filter->MAMPid, ntohl(filter->id));
-  
-  printf("MP_GetFilter():\n%s\n",query);
-  if ( mysql_query(connection, query) != 0 ) {
-    fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
+static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from){
+  LOG_EVENT("MPFilterID");
+
+  if ( !q("SELECT * FROM %s_filterlist WHERE filter_id='%d' LIMIT 1",
+	  filter->MAMPid, ntohl(filter->id)) ){
     return;
   }
 
-  result = mysql_store_result(connection);
+  MYSQL_RES* result = mysql_store_result(&connection);
   if ( !send_mysql_filter(marc, result, from, filter->MAMPid) ){
-    fprintf(stderr, "No filter matching {%02d}\n", ntohl(filter->id));
+    logmsg(verbose, "No filter matching {%02d}\n", ntohl(filter->id));
     MPMessage reply;
     reply.type = MP_FILTER_INVALID_ID;
     int ret;
     if ( (ret=marc_push_event(marc, &reply, from)) != 0 ){
-      fprintf(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+      logmsg(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
     }
   }
   mysql_free_result(result);
 }
 
-void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
+static void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
   char statusQ[2000];
   static char buf[100];
   char *query;
@@ -431,30 +460,15 @@ void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
   }
 
   printf("MP_VerifyFilter():\n%s\n",query);
-  state=mysql_query(connection,query);
-  if(state != 0) {
-    printf("%s\n", mysql_error(connection));
+  if ( mysql_query(&connection, query) != 0 ) {
+    logmsg(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(&connection), query);
+    return;
   }
 
   return;
 }
 
-char *hexdump_address (const struct ether_addr* addr){
-  return hexdump_address_r(addr, hex_string);
-}
-
-static char* hexdump_address_r(const struct ether_addr* address, char buf[IFHWADDRLEN*3]){
-  int i;
-
-  for (i = 0; i < IFHWADDRLEN - 1; i++) {
-    sprintf (buf + 3*i, "%2.2X:", address->ether_addr_octet[i]);
-  }
-  sprintf (buf + 15, "%2.2X", address->ether_addr_octet[i]);
-
-  return buf;
-}
-
-int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
+static int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
   struct Filter* rule = &fpi->filter;
 
   char *pos=0;
@@ -519,7 +533,7 @@ int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
 
 
 /* Convert a string ip with dotted decimal to a hexc.. */
-int inet_atoP(char *dest,char *org){
+static int inet_atoP(char *dest,char *org){
   char tmp[3];
   tmp[2]='\0';
   int j,k;
@@ -529,23 +543,6 @@ int inet_atoP(char *dest,char *org){
     strncpy(tmp,org+k,2);
     t=(int)strtoul(tmp,NULL,16);
     *(dest+j)=t;
-    k=k+2;
-  }
-  return 1;
-}
-
-/* Convert a string Ethernet to hex. */
-int inet_aEtoP(char *dest,char *org){
-  char tmp[3];
-  tmp[2]='\0';
-  int j,k;
-  j=k=0;
-  int t;
-  for(j=0;j<ETH_ALEN;j++){
-    strncpy(tmp,org+k,2);
-    t=(int)strtoul(tmp,NULL,16);
-    *(dest+j)=t;
-    printf("%s --> %02x \n",tmp, t);
     k=k+2;
   }
   return 1;
