@@ -17,7 +17,13 @@
  *                                                                         *
  ***************************************************************************/
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif /* HAVE_CONFIG_H */
+
 #include <libmarc/libmarc.h>
+#include <libmarc/log.h>
+#include <libmarc/version.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -52,6 +58,9 @@ MYSQL_ROW row;
 MYSQL *connection, mysql;
 int state;
 
+int verbose_flag = 0;
+FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
+
 void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
 void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from);
 void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from);
@@ -63,44 +72,6 @@ static char *hexdump_address_r (const struct ether_addr* address, char buf[IFHWA
 int convMySQLtoFPI(struct FPI *rule,  MYSQL_RES *result);
 int inet_atoP(char *dest,char *org);
 int inet_aEtoP(char *dest,char *org);
-void printFilter(struct FPI *F);
-
-/**
- * Dump the content of data as hexadecimal (and its ascii repr.)
- */
-static void hexdump(FILE* fp, const char* data, size_t size){
-  const size_t align = size + (size % 16);
-  fputs("[0000]  ", fp);
-  for( unsigned int i=0; i < align; i++){
-    if ( i < size ){
-      fprintf(fp, "%02X ", data[i] & 0xff);
-    } else {
-      fputs("   ", fp);
-    }
-    if ( i % 4 == 3 ){
-      fputs("   ", fp);
-    }
-    if ( i % 16 == 15 ){
-      fputs("    |", fp);
-      for ( unsigned int j = i-15; j<=i; j++ ){
-        char ch = data[j];
-
-        if ( j >= size ){
-          ch = ' ';
-        } else if ( !isprint(data[j]) ){
-          ch = '.';
-        }
-
-        fputc(ch, fp);
-      }
-      fputs("|", fp);
-      if ( (i+1) < align){
-        fprintf(fp, "\n[%04X]  ", i+1);
-      }
-    }
-  }
-  printf("\n");
-}
 
 int main(int argc, char *argv[]){
   extern int opterr, optopt;
@@ -114,6 +85,7 @@ int main(int argc, char *argv[]){
     {"database",1,0,'d'},
     {"user",1,0,'u'},
     {"password",1,0,'p'},
+    {"verbose", 0, &verbose_flag, 1},
     {0, 0, 0, 0}
   };
   
@@ -131,6 +103,7 @@ int main(int argc, char *argv[]){
   opterr=0;
   optopt=0;
 
+  printf("MArCd " VERSION " (libmarc-" LIBMARC_VERSION ")\n");
 
   port=LOCAL_SERVER_PORT;
   for(;;) {
@@ -141,14 +114,20 @@ int main(int argc, char *argv[]){
       break;
     
     switch (op)        {
-      case 'v':
-	printf("help\n");
-	printf("usage: %s [options] filename\n",argv[0]);
-	printf("-v or --help      Tis text\n");
-	printf("-h or --host      IP of DB server.\n");
-	printf("-d or --database  Database name.\n");
-	printf("-u or --user      Username in database.\n");
-	printf("-p or --password  Password for user.\n");
+    case 0: /* long opt */
+      break;
+
+    case 'v':
+      printf("(C) 2004 patrik.arlos@bth.se\n");
+      printf("(C) 2011 david.sveningsson@bth.se\n"),
+	printf("Usage: %s -d NAME -u USER [OPTIONS]\n",argv[0]);
+	printf("  -h, --host      MySQL database host. [Default: localhost]\n");
+	printf("  -d, --database  Database name.\n");
+	printf("  -u, --user      Database username.\n");
+	printf("  -p, --password  Database password, use '-' to read password\n"
+	       "                  from stdin. [Default: none]\n");
+	printf("      --verbose   Verbose output.\n");
+	printf("      --help      This text\n");
 	exit(0);
 	break;	
     case 'h':
@@ -171,11 +150,17 @@ int main(int argc, char *argv[]){
       requiredARG++;
       printf("DB password = %s.\n",password);
       break;
-      
     default:
       printf ("?? getopt returned character code 0%o ??\n", op);
     }
   }
+
+  /* setup vfp to stdout or /dev/null depending on verbose flag */
+  verbose = stdout;
+  if ( !verbose_flag ){
+    verbose = fopen("/dev/null", "w");
+  }
+
   /*
     
   if(requiredARG<4){
@@ -405,6 +390,12 @@ void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from
   result = mysql_store_result(connection);
   if ( !send_mysql_filter(marc, result, from, filter->MAMPid) ){
     fprintf(stderr, "No filter matching {%02d}\n", ntohl(filter->id));
+    MPMessage reply;
+    reply.type = MP_FILTER_INVALID_ID;
+    int ret;
+    if ( (ret=marc_push_event(marc, &reply, from)) != 0 ){
+      fprintf(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+    }
   }
   mysql_free_result(result);
 }
