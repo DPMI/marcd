@@ -3,7 +3,9 @@
                              -------------------
     begin                : Mon 28 Nov, 2005
     copyright            : (C) 2005 by Patrik Arlos
+                         : (C) 2011 by David Sveningsson
     email                : patrik.arlos@bth.se
+                         : david.sveningsson@bth.se
  ***************************************************************************/
 
 /***************************************************************************
@@ -52,7 +54,7 @@ int state;
 
 void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
 void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from);
-void MP_GetFilter(int sd, struct sockaddr from, char buffer[1500]);
+void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from);
 void MP_VerifyFilter(int sd, struct sockaddr from, char buffer[1500]);
 
 char *hexdump_address (const struct ether_addr* addr);
@@ -225,6 +227,10 @@ int main(int argc, char *argv[]){
       MP_Status(marc, &event.status, &from);
       break;
 
+    case MP_FILTER_REQUEST_EVENT:
+      MP_GetFilter(marc, &event.filter_id, &from);
+      break;
+
     default:
       fprintf(stderr, "not handling message of type %d\n", event.type);
     }
@@ -237,12 +243,6 @@ int main(int argc, char *argv[]){
       // msgPtr=(struct Generic*)(messageBuffer);
       // printf("\nType  = %d \n", ntohl(msgPtr->type));
       // switch(ntohl(msgPtr->type)){
-      // case 1:
-      // 	MP_Init(sd, from, messageBuffer);
-      // 	break;
-      // case 2:
-      // 	MP_Status(sd,from, messageBuffer);
-      // 	break;
       // case 3:
       // 	MP_GetFilter(sd,from, messageBuffer);
       // 	break;
@@ -254,6 +254,36 @@ int main(int argc, char *argv[]){
       // 	printf("Unknown message.\n");
       // 	break;
       // }
+
+/**
+ * Fetches a row from the MySQL resultset, parses it and sends it as a packed filter to dst
+ * @return Zero on error.
+ */
+static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sockaddr* dst, const char* MAMPid){
+  struct FPI fpi;
+  struct MPFilter MPfilter;
+  
+  if ( !convMySQLtoFPI(&fpi, result) ){
+    return 0;
+  }
+
+  struct Filter* filter = &fpi.filter;
+  
+  MPfilter.type = MP_FILTER_EVENT;
+  sprintf(MPfilter.MAMPid, "%s", MAMPid);
+  marc_filter_pack(filter, &MPfilter.filter);
+  
+  printf("Sending Filter {%d} to to MP %s.\n", filter->filter_id, MPfilter.MAMPid);
+  hexdump(stdout, (char*)&MPfilter, sizeof(struct MPFilter));
+  
+  int ret;
+  if ( (ret=marc_push_event(marc, (MPMessage*)&MPfilter, dst)) != 0 ){
+    fprintf(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+    return 0;
+  }
+
+  return 1;
+}
 
 void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* from){
   struct sockaddr_in MPadr;
@@ -336,23 +366,7 @@ void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* fro
   
   /*process each row*/  
   for( int n=0; n < rows; n++ ){
-    struct FPI fpi;
-    struct MPFilter MPfilter;
-
-    convMySQLtoFPI(&fpi, result);
-    struct Filter* filter = &fpi.filter;
-      
-    MPfilter.type = MP_FILTER_EVENT;
-    sprintf(MPfilter.MAMPid, "%s", MAMPid);
-    marc_filter_pack(filter, &MPfilter.filter);
-      
-    printf("Sending Filter {%d} to to MP %s.\n", filter->filter_id, MPfilter.MAMPid);
-    hexdump(stdout, (char*)&MPfilter, sizeof(struct MPFilter));
-
-    if ( (ret=marc_push_event(marc, (MPMessage*)&MPfilter, from)) != 0 ){
-      fprintf(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
-      return;
-    }    
+    send_mysql_filter(marc, result, from, MAMPid);
   }
 
   /* free the result set */
@@ -377,36 +391,22 @@ void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from){
 }
 
 
-void MP_GetFilter(int sd, struct sockaddr from, char *buffer){
-  char statusQ[2000];
-  char *query;
-  int slen;
-  socklen_t fromlen = sizeof(from);
-  struct FPI *newRule;
-  query=statusQ;
-  bzero(statusQ,sizeof(statusQ));
-  struct MPFilter* filter=(struct MPFilter*)buffer;
-  sprintf(statusQ,"SELECT * FROM %s_filterlist WHERE filter_id='%d'",filter->MAMPid,filter->filter.filter_id);
-
+void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from){
+  char query[2000] = {0,};
+  sprintf(query, "SELECT * FROM %s_filterlist WHERE filter_id='%d' LIMIT 1",
+	  filter->MAMPid, ntohl(filter->id));
+  
   printf("MP_GetFilter():\n%s\n",query);
-  state=mysql_query(connection,query);
-  if(state != 0) {
-    puts(mysql_error(connection));
+  if ( mysql_query(connection, query) != 0 ) {
+    fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
+    return;
   }
-  printf("Got info from Db.\n");
+
   result = mysql_store_result(connection);
-  newRule=(struct FPI*)calloc(1, sizeof(struct FPI));
-  convMySQLtoFPI(newRule,result);
-  printf("Sending this filter.\n");
-  marc_filter_print(stdout, &newRule->filter, 1);
-  memcpy(&filter->filter,&newRule->filter,sizeof(struct FilterPacked));
-
-  printf("Sending Resonse to MP_init. foo\n");
-  hexdump(stdout, (const char*)filter, sizeof(struct MPFilter));
-  slen=sendto(sd,filter,sizeof(struct MPFilter),0,&from,fromlen);
-  printf("Sent %d bytes.\n",slen);
-
-  return;
+  if ( !send_mysql_filter(marc, result, from, filter->MAMPid) ){
+    fprintf(stderr, "No filter matching {%02d}\n", ntohl(filter->id));
+  }
+  mysql_free_result(result);
 }
 
 void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
@@ -467,8 +467,12 @@ int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
   struct Filter* rule = &fpi->filter;
 
   char *pos=0;
-  MYSQL_ROW row;  
-  row=mysql_fetch_row(result);
+  MYSQL_ROW row = mysql_fetch_row(result);
+
+  if ( !row ){ /* no more rows */
+    return 0;
+  }
+
   rule->filter_id=atoi(row[0]);
   rule->index=atoi(row[1]);
   strncpy(rule->CI_ID,row[2],8);
