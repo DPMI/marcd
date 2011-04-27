@@ -51,11 +51,13 @@ MYSQL *connection, mysql;
 int state;
 
 void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
-void MP_Status(int sd, struct sockaddr from, char buffer[1500]);
+void MP_Status(marc_context_t marc, MPstatus* init, struct sockaddr* from);
 void MP_GetFilter(int sd, struct sockaddr from, char buffer[1500]);
 void MP_VerifyFilter(int sd, struct sockaddr from, char buffer[1500]);
 
-char *hexdump_address (char address[IFHWADDRLEN]);
+char *hexdump_address (const struct ether_addr* addr);
+static char *hexdump_address_r (const struct ether_addr* address, char buf[IFHWADDRLEN*3]);
+
 int convMySQLtoFPI(struct FPI *rule,  MYSQL_RES *result);
 int inet_atoP(char *dest,char *org);
 int inet_aEtoP(char *dest,char *org);
@@ -219,6 +221,10 @@ int main(int argc, char *argv[]){
       MP_Init(marc, &event.init, &from);
       break;
     
+    case MP_STATUS_EVENT:
+      MP_Status(marc, &event.status, &from);
+      break;
+
     default:
       fprintf(stderr, "not handling message of type %d\n", event.type);
     }
@@ -259,7 +265,7 @@ void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* fro
 
   printf("MPinit\n");
   printf("      .type= %d \n",MPinit->type);
-  printf("      .mac = %s \n",hexdump_address(MPinit->mac));
+  printf("      .mac = %s \n", hexdump_address(&MPinit->hwaddr));
   printf("      .name= %s \n",MPinit->hostname);
   memcpy(&MPadr.sin_addr.s_addr, MPinit->ipaddress,sizeof(struct in_addr));
   printf("      .ipaddress = %s \n", inet_ntoa(MPadr.sin_addr));
@@ -273,7 +279,7 @@ void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* fro
     abort();
   }
 
-  sprintf(query, "SELECT MAMPid FROM measurementpoints WHERE mac='%s' AND name='%s'",hexdump_address(MPinit->mac),MPinit->hostname);
+  sprintf(query, "SELECT MAMPid FROM measurementpoints WHERE mac='%s' AND name='%s'", hexdump_address(&MPinit->hwaddr), MPinit->hostname);
   if ( mysql_query(connection,query) != 0 ) {
     fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
     return;
@@ -288,7 +294,7 @@ void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* fro
 	    ,MPinit->hostname
 	    ,inet_ntoa(MPadr.sin_addr)
 	    ,ntohs(MPinit->port)
-	    ,hexdump_address((char*)MPinit->mac)
+	    ,hexdump_address(&MPinit->hwaddr)
 	    ,ntohs(MPinit->maxFilters)
 	    ,ntohs(MPinit->noCI));
     if ( mysql_query(connection,query) != 0 ) {
@@ -340,7 +346,7 @@ void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* fro
     sprintf(MPfilter.MAMPid, "%s", MAMPid);
     marc_filter_pack(filter, &MPfilter.filter);
       
-    printf("Sending Filter %d to to MP %s.\n", filter->filter_id, MPfilter.MAMPid);
+    printf("Sending Filter {%d} to to MP %s.\n", filter->filter_id, MPfilter.MAMPid);
     hexdump(stdout, (char*)&MPfilter, sizeof(struct MPFilter));
 
     if ( (ret=marc_push_event(marc, (MPMessage*)&MPfilter, from)) != 0 ){
@@ -356,20 +362,20 @@ void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* fro
   return;
 }
 
-void MP_Status(int sd, struct sockaddr from, char *buffer){
-  char statusQ[2000];
-  char *query;
-  query=statusQ;
-  bzero(statusQ,sizeof(statusQ));
-  struct MPstatus* MPstat=(struct MPstatus*)buffer;
-  sprintf(statusQ,"INSERT INTO %s_CIload SET noFilters='%d', matchedPkts='%d' %s",MPstat->MAMPid,ntohl(MPstat->noFilters),ntohl(MPstat->matched), MPstat->CIstats);
+void MP_Status(marc_context_t marc, MPstatus* init, struct sockaddr* from){
+  // char statusQ[2000];
+  // char *query;
+  // query=statusQ;
+  // bzero(statusQ,sizeof(statusQ));
+  // struct MPstatus* MPstat=(struct MPstatus*)buffer;
+  // sprintf(statusQ,"INSERT INTO %s_CIload SET noFilters='%d', matchedPkts='%d' %s",MPstat->MAMPid,ntohl(MPstat->noFilters),ntohl(MPstat->matched), MPstat->CIstats);
 
-  printf("MP_status():\n%s\n",query);
-  state=mysql_query(connection,query);
-  if(state != 0) {
-    puts(mysql_error(connection));
-  }
-  printf("Status added to Database.\n");
+  // printf("MP_status():\n%s\n",query);
+  // state=mysql_query(connection,query);
+  // if(state != 0) {
+  //   puts(mysql_error(connection));
+  // }
+  // printf("Status added to Database.\n");
   return;
 }
 
@@ -395,7 +401,7 @@ void MP_GetFilter(int sd, struct sockaddr from, char *buffer){
   newRule=(struct FPI*)calloc(1, sizeof(struct FPI));
   convMySQLtoFPI(newRule,result);
   printf("Sending this filter.\n");
-  printFilter(newRule);
+  marc_filter_print(stdout, &newRule->filter, 1);
   memcpy(&filter->filter,&newRule->filter,sizeof(struct FilterPacked));
 
   printf("Sending Resonse to MP_init. foo\n");
@@ -406,10 +412,9 @@ void MP_GetFilter(int sd, struct sockaddr from, char *buffer){
   return;
 }
 
-
-
 void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
   char statusQ[2000];
+  static char buf[100];
   char *query;
   query=statusQ;
   bzero(statusQ,sizeof(statusQ));
@@ -418,14 +423,11 @@ void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
   if(MyVerify->flags==0) {
     sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', comment='NOT PRESENT'", MyVerify->MAMPid,MyVerify->filter_id); 
   } else {
-    sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', ind='%d', CI_ID='%s', VLAN_TCI='%d', VLAN_TCI_MASK='%d',ETH_TYPE='%d', ETH_TYPE_MASK='%d',ETH_SRC='%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X',ETH_SRC_MASK='%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X', ETH_DST='%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X', ETH_DST_MASK='%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X',IP_PROTO='%d', IP_SRC='%s', IP_SRC_MASK='%s', IP_DST='%s', IP_DST_MASK='%s', SRC_PORT='%d', SRC_PORT_MASK='%d', DST_PORT='%d', DST_PORT_MASK='%d', TYPE='%d', CAPLEN='%d', consumer='%d'",
+    sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', ind='%d', CI_ID='%s', VLAN_TCI='%d', VLAN_TCI_MASK='%d',ETH_TYPE='%d', ETH_TYPE_MASK='%d',ETH_SRC='%s',ETH_SRC_MASK='%s', ETH_DST='%s', ETH_DST_MASK='%s',IP_PROTO='%d', IP_SRC='%s', IP_SRC_MASK='%s', IP_DST='%s', IP_DST_MASK='%s', SRC_PORT='%d', SRC_PORT_MASK='%d', DST_PORT='%d', DST_PORT_MASK='%d', TYPE='%d', CAPLEN='%d', consumer='%d'",
 	    MyVerify->MAMPid,F->filter_id,F->index,F->CI_ID,F->VLAN_TCI,F->VLAN_TCI_MASK,
-	    F->ETH_TYPE,F->ETH_TYPE_MASK, 
-	    (unsigned char)(F->ETH_SRC.ether_addr_octet[0]),(unsigned char)(F->ETH_SRC.ether_addr_octet[1]),(unsigned char)(F->ETH_SRC.ether_addr_octet[2]),(unsigned char)(F->ETH_SRC.ether_addr_octet[3]),(unsigned char)(F->ETH_SRC.ether_addr_octet[4]),(unsigned char)(F->ETH_SRC.ether_addr_octet[5]),
-	    (unsigned char)(F->ETH_SRC_MASK[0]),(unsigned char)(F->ETH_SRC_MASK[1]),(unsigned char)(F->ETH_SRC_MASK[2]),(unsigned char)(F->ETH_SRC_MASK[3]),(unsigned char)(F->ETH_SRC_MASK[4]),(unsigned char)(F->ETH_SRC_MASK[5]),
-
-	    (unsigned char)(F->ETH_DST.ether_addr_octet[0]),(unsigned char)(F->ETH_DST.ether_addr_octet[1]),(unsigned char)(F->ETH_DST.ether_addr_octet[2]),(unsigned char)(F->ETH_DST.ether_addr_octet[3]),(unsigned char)(F->ETH_DST.ether_addr_octet[4]),(unsigned char)(F->ETH_DST.ether_addr_octet[5]),
-	    (unsigned char)(F->ETH_DST_MASK[0]),(unsigned char)(F->ETH_DST_MASK[1]),(unsigned char)(F->ETH_DST_MASK[2]),(unsigned char)(F->ETH_DST_MASK[3]),(unsigned char)(F->ETH_DST_MASK[4]),(unsigned char)(F->ETH_DST_MASK[5]),
+	    F->ETH_TYPE,F->ETH_TYPE_MASK,
+	    hexdump_address_r(&F->ETH_SRC, &buf[0]), hexdump_address_r(&F->ETH_SRC_MASK, &buf[17]),
+	    hexdump_address_r(&F->ETH_DST, &buf[0]), hexdump_address_r(&F->ETH_DST_MASK, &buf[17]),
 	    F->IP_PROTO,
 	    F->IP_SRC,F->IP_SRC_MASK,F->IP_DST,F->IP_DST_MASK,
 	    F->SRC_PORT,F->SRC_PORT_MASK,F->DST_PORT,F->DST_PORT_MASK,
@@ -449,17 +451,20 @@ void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
   return;
 }
 
+char *hexdump_address (const struct ether_addr* addr){
+  return hexdump_address_r(addr, hex_string);
+}
 
-char *hexdump_address (char address[IFHWADDRLEN]){
+static char* hexdump_address_r(const struct ether_addr* address, char buf[IFHWADDRLEN*3]){
   int i;
 
   for (i = 0; i < IFHWADDRLEN - 1; i++) {
-    sprintf (hex_string + 3*i, "%2.2X:", (unsigned char) address[i]);
-  }  
-  sprintf (hex_string + 15, "%2.2X", (unsigned char) address[i]);
-  return (hex_string);
-}
+    sprintf (buf + 3*i, "%2.2X:", address->ether_addr_octet[i]);
+  }
+  sprintf (buf + 15, "%2.2X", address->ether_addr_octet[i]);
 
+  return buf;
+}
 
 int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
   struct Filter* rule = &fpi->filter;
@@ -489,9 +494,9 @@ int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
   rule->consumer=atoi(row[20]);
   
   inet_atoP((char*)rule->ETH_SRC.ether_addr_octet,row[7]);
-  inet_atoP((char*)rule->ETH_SRC_MASK,row[8]);
+  inet_atoP((char*)rule->ETH_SRC_MASK.ether_addr_octet,row[8]);
   inet_atoP((char*)rule->ETH_DST.ether_addr_octet,row[9]);
-  inet_atoP((char*)rule->ETH_DST_MASK,row[10]);
+  inet_atoP((char*)rule->ETH_DST_MASK.ether_addr_octet,row[10]);
 
   rule->TYPE=atoi(row[22]);
   rule->CAPLEN=atoi(row[23]);
@@ -552,112 +557,4 @@ int inet_aEtoP(char *dest,char *org){
     k=k+2;
   }
   return 1;
-}
-
-
-void printFilter(struct FPI *fpi){
-  struct Filter* F = &fpi->filter;
-  printf("CTRL PRINT FILTER\n");
-  printf("filter_id    :%d\n",F->filter_id);
-  printf("consumer     :%d\n",F->consumer);
-  switch(F->TYPE){
-  case 3:
-  case 2:
-    printf("DESTADDRESS  :%s TYPE : %d\n",F->DESTADDR, F->TYPE);
-    printf("DESTPORT     :%d \n",F->DESTPORT);
-    break;
-  case 1:
-    printf("DESTADDRESS  :%02X:%02X:%02X:%02X:%02X:%02X  TYPE    :%d\n",F->DESTADDR[0],F->DESTADDR[1],F->DESTADDR[2],F->DESTADDR[3],F->DESTADDR[4],F->DESTADDR[5], F->TYPE);
-    break;
-  case 0:
-    printf("DESTFILE     :%s TYPE %d \n",F->DESTADDR, F->TYPE);
-    break;
-  }
-  printf("CAPLEN       :%d\n",F->CAPLEN);
-  printf("index        :%d\n",F->index);
-  printf("CI_ID        :");
-  if(F->index&512)
-    printf("%s\n",F->CI_ID);
-  else 
-    printf("NULL\n");
-  
-  printf("VLAN_TCI     :");
-  if(F->index&256){
-    printf("%d\n",F->VLAN_TCI);
-    printf("VLAN_TCI_MASK:%d\n",F->VLAN_TCI_MASK);
-  }  else{
-    printf("NULL\n");
-    printf("VLAN_TCI_MASK:NULL\n");
-  }
-
-  printf("ETH_TYPE     :");
-  if(F->index&128){
-    printf("%d\n",F->ETH_TYPE);
-    printf("ETH_TYPE_MASK: %d\n",F->ETH_TYPE_MASK);
-  }  else {
-    printf("NULL\n");
-    printf("ETH_TYPE_MASK:NULL\n");
-  }
-  
-  printf("ETH_SRC      :");
-  if(F->index&64){
-    printf("%s\n",hexdump_address((char*)F->ETH_SRC.ether_addr_octet));
-    printf("ETH_SRC_MASK :%s\n",hexdump_address((char*)F->ETH_SRC_MASK));
-  } else {
-    printf("NULL\n");
-    printf("ETH_SRC_MASK:NULL\n");
-  }
-
-  printf("ETH_DST      :");
-  if(F->index&32){
-    printf("%s\n",(char*)F->ETH_DST.ether_addr_octet);
-    printf("ETH_DST_MASK:%s\n",F->ETH_DST_MASK);
-  } else {
-    printf("NULL\n");
-    printf("ETH_DST_MASK :NULL\n");
-  }
-  
-  printf("IP_PROTO     :");
-  if(F->index&16)
-    printf("%d\n",F->IP_PROTO);
-  else
-    printf("NULL\n");
-
-  printf("IP_SRC       :");
-  if(F->index&8){
-    printf("%s\n",(char*)F->IP_SRC);
-    printf("IP_SRC_MASK  :%s\n",F->IP_SRC_MASK);
-  } else {
-    printf("NULL\n");
-    printf("IP_SRC_MASK:NULL\n");
-  }
-
-  printf("IP_DST       :");
-  if(F->index&4){
-    printf("%s\n",(char*)F->IP_DST);
-    printf("IP_DST_MASK  :%s\n",F->IP_DST_MASK);
-  } else {
-    printf("NULL\n");
-    printf("IP_DST_MASK:NULL\n");
-  }
-
-  printf("PORT_SRC     :");
-  if(F->index&2){
-    printf("%d\n",F->SRC_PORT);
-    printf("PORT_SRC_MASK:%d\n",F->SRC_PORT_MASK);
-  } else {
-    printf("NULL\n");
-    printf("PORT_SRC_MASK:NULL\n");
-  }
-
-  printf("PORT_DST     :");
-  if(F->index&1){
-    printf("%d\n",F->DST_PORT);
-    printf("PORT_DST_MASK:%d\n",F->DST_PORT_MASK);
-  } else {
-    printf("NULL\n");
-    printf("PORT_DST_MASK:NULL\n");
-  }
-  
-
 }
