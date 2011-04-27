@@ -51,7 +51,7 @@ MYSQL *connection, mysql;
 int state;
 
 void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
-void MP_Status(marc_context_t marc, MPstatus* init, struct sockaddr* from);
+void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from);
 void MP_GetFilter(int sd, struct sockaddr from, char buffer[1500]);
 void MP_VerifyFilter(int sd, struct sockaddr from, char buffer[1500]);
 
@@ -362,20 +362,17 @@ void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* fro
   return;
 }
 
-void MP_Status(marc_context_t marc, MPstatus* init, struct sockaddr* from){
-  // char statusQ[2000];
-  // char *query;
-  // query=statusQ;
-  // bzero(statusQ,sizeof(statusQ));
-  // struct MPstatus* MPstat=(struct MPstatus*)buffer;
-  // sprintf(statusQ,"INSERT INTO %s_CIload SET noFilters='%d', matchedPkts='%d' %s",MPstat->MAMPid,ntohl(MPstat->noFilters),ntohl(MPstat->matched), MPstat->CIstats);
+void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from){
+  char query[2000] = {0,};
+  sprintf(query, "INSERT INTO %s_CIload SET noFilters='%d', matchedPkts='%d' %s",
+	  MPstat->MAMPid, ntohl(MPstat->noFilters), ntohl(MPstat->matched), MPstat->CIstats);
 
-  // printf("MP_status():\n%s\n",query);
-  // state=mysql_query(connection,query);
-  // if(state != 0) {
-  //   puts(mysql_error(connection));
-  // }
-  // printf("Status added to Database.\n");
+  printf("MP_status():\n%s\n",query);
+  if ( mysql_query(connection, query) != 0 ) {
+    fprintf(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(connection), query);
+    return;
+  }
+  printf("Status added to Database.\n");
   return;
 }
 
