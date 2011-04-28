@@ -337,10 +337,12 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   if ( !q("SELECT MAMPid FROM measurementpoints WHERE mac='%s' AND name='%s'", hexdump_address(&MPinit->hwaddr), MPinit->hostname) ){
     return;
   }
+
+  char MAMPid[16] = {0,};
   
   MYSQL_RES* result = mysql_store_result(&connection);
   if(mysql_num_rows(result)==0){ /* We are a new MP..  */
-    logmsg(stderr, "This is an unregisterd MP.");
+    logmsg(verbose, "This is an unregisterd MP.\n");
     mysql_free_result(result);
 
     if ( !q("INSERT INTO measurementpoints SET name='%s',ip='%s',port='%d',mac='%s',maxFilters=%d,noCI=%d"
@@ -352,12 +354,11 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 	    ,ntohs(MPinit->noCI)) ){
       return;
     }
+  } else { /* known MP */
+    MYSQL_ROW row = mysql_fetch_row(result);
+    strncpy(MAMPid, row[0], 16);
+    mysql_free_result(result);
   }
-
-  char MAMPid[16];
-  MYSQL_ROW row = mysql_fetch_row(result);
-  strncpy(MAMPid, row[0], 16);
-  mysql_free_result(result);
 
   logmsg(verbose, "MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
   memcpy(MPauth.MAMPid, MAMPid, 16);
