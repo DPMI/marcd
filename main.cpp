@@ -286,17 +286,10 @@ static int q(const char* sql, ...){
   vsnprintf(query, sizeof(query), sql, ap);
   va_end(ap);
 
-  int ret;
-  if ( (ret=mysql_ping(&connection)) != 0 ){
-    switch (ret){
-    case CR_SERVER_GONE_ERROR:
-      if ( !connect() ){
-	return 0;
-      }
-      break;
-
-    default:
-      logmsg(stderr, "Connection to MySQL lost: %s\n", mysql_error(&connection));
+  if ( mysql_ping(&connection) != 0 ){
+    logmsg(stderr, "Connection to MySQL lost: %s\n", mysql_error(&connection));
+    logmsg(stderr, "Trying to reconnect.\n");
+    if ( !connect() ){
       return 0;
     }
   }
@@ -321,6 +314,8 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
   MPauth.type = MP_CONTROL_AUTHORIZE_EVENT;
   memset(MPauth.MAMPid, 0, 16);
+  MPauth.version.major = htons(LIBMARC_VERSION_MAJOR);
+  MPauth.version.minor = htons(LIBMARC_VERSION_MINOR);
 
   memcpy(&MPadr.sin_addr.s_addr, MPinit->ipaddress,sizeof(struct in_addr));
 
@@ -362,6 +357,11 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
   logmsg(verbose, "MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
   memcpy(MPauth.MAMPid, MAMPid, 16);
+
+  if ( debug_flag ){
+    logmsg(verbose, "Sending authorization reply.\n");
+    hexdump(verbose, (const char*)&MPauth, sizeof(struct MPauth));
+  }
 
   /* Send authorize message (telling whenever it is authorized or not) */
   if ( (ret=marc_push_event(marc, (MPMessage*)&MPauth, from)) != 0 ){
