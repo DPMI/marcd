@@ -218,22 +218,6 @@ int main(int argc, char *argv[]){
   return 0;
 }
 
-
-      // msgPtr=(struct Generic*)(messageBuffer);
-      // printf("\nType  = %d \n", ntohl(msgPtr->type));
-      // switch(ntohl(msgPtr->type)){
-      // case 3:
-      // 	MP_GetFilter(sd,from, messageBuffer);
-      // 	break;
-      // case 6:
-      // 	MP_VerifyFilter(sd,from, messageBuffer);
-      // 	break;
-
-      // default:
-      // 	printf("Unknown message.\n");
-      // 	break;
-      // }
-
 static int connect(){
   logmsg(verbose, "Connecting to mysql://%s@%s:%d/%s (using password: %s)\n",
 	 db_username, db_hostname, db_port, db_name, db_password[0] != 0 ? "YES" : "NO");
