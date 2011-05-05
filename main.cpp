@@ -260,10 +260,10 @@ static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sock
   struct Filter* filter = &fpi.filter;
   
   MPfilter.type = MP_FILTER_EVENT;
-  sprintf(MPfilter.MAMPid, "%s", MAMPid);
+  mampid_set(MPfilter.MAMPid, MAMPid);
   marc_filter_pack(filter, &MPfilter.filter);
   
-  logmsg(verbose, "Sending Filter {%d} to to MP %s.\n", filter->filter_id, MPfilter.MAMPid);
+  logmsg(verbose, "Sending Filter {%d} to to MP %s.\n", filter->filter_id, mampid_get(MPfilter.MAMPid));
 
   if ( debug_flag ){
     hexdump(verbose, (char*)&MPfilter, sizeof(struct MPFilter));
@@ -313,7 +313,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   int ret;
 
   MPauth.type = MP_CONTROL_AUTHORIZE_EVENT;
-  memset(MPauth.MAMPid, 0, 16);
+  mampid_set(MPauth.MAMPid, 0);
   MPauth.version.major = htons(LIBMARC_VERSION_MAJOR);
   MPauth.version.minor = htons(LIBMARC_VERSION_MINOR);
 
@@ -327,7 +327,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   logmsg(verbose, "      .port = %d \n", ntohs(MPinit->port));
   logmsg(verbose, "      .maxFilters = %d \n",ntohs(MPinit->maxFilters));
   logmsg(verbose, "      .noCI = %d \n", ntohs(MPinit->noCI));
-  logmsg(verbose, "      .MAMPid = %s \n", MPinit->MAMPid);
+  logmsg(verbose, "      .MAMPid = %s \n", mampid_get(MPinit->MAMPid));
   
   if ( !q("SELECT MAMPid FROM measurementpoints WHERE mac='%s' AND name='%s'", hexdump_address(&MPinit->hwaddr), MPinit->hostname) ){
     return;
@@ -356,7 +356,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   }
 
   logmsg(verbose, "MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
-  memcpy(MPauth.MAMPid, MAMPid, 16);
+  mampid_set(MPauth.MAMPid, MAMPid);
 
   if ( debug_flag ){
     logmsg(verbose, "Sending authorization reply.\n");
@@ -403,17 +403,27 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
 static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from){
   LOG_EVENT("MPstatus");
+  
+  if ( MPstat->MAMPid[0] == 0 ){
+    logmsg(stderr, "MPstat with invalid MAMPid (null)\n");
+    return;
+  }
 
   q("INSERT INTO %s_CIload SET noFilters='%d', matchedPkts='%d' %s",
-    MPstat->MAMPid, ntohl(MPstat->noFilters), ntohl(MPstat->matched), MPstat->CIstats);
+    mampid_get(MPstat->MAMPid), ntohl(MPstat->noFilters), ntohl(MPstat->matched), MPstat->CIstats);
 }
 
 
 static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from){
   LOG_EVENT("MPFilterID");
 
+  if ( filter->MAMPid[0] == 0 ){
+    logmsg(stderr, "MPFilterID with invalid MAMPid (null)\n");
+    return;
+  }
+
   if ( !q("SELECT * FROM %s_filterlist WHERE filter_id='%d' LIMIT 1",
-	  filter->MAMPid, ntohl(filter->id)) ){
+	  mampid_get(filter->MAMPid), ntohl(filter->id)) ){
     return;
   }
 
