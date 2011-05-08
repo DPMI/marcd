@@ -39,8 +39,9 @@
 #include <errmsg.h> /* from mysql */
 
 #define LOCAL_SERVER_PORT 1600;
-#define LOG_EVENT(x) \
-  logmsg(verbose, x " from %s:%d\n", inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port))
+#define LOG_EVENT(x, mampid)							\
+  logmsg(verbose, x " from %s:%d (MAMPid: %s)\n", \
+  inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid)
 
 static MYSQL connection;
 static char db_hostname[64] = "localhost";
@@ -375,7 +376,6 @@ static int q(const char* sql, ...){
 }
 
 static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* from){
-  LOG_EVENT("MPinitialization");
   struct sockaddr_in MPadr;
   struct MPauth MPauth;
   int ret;
@@ -473,7 +473,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 }
 
 static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from){
-  LOG_EVENT("MPstatus");
+  LOG_EVENT("MPstatus", mampid_get(MPstat->MAMPid));
   
   if ( MPstat->MAMPid[0] == 0 ){
     logmsg(stderr, "MPstat with invalid MAMPid (null)\n");
@@ -491,7 +491,7 @@ static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* fr
 }
 
 static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from){
-  LOG_EVENT("MPFilterID");
+  LOG_EVENT("MPFilterID", mampid_get(filter->MAMPid));
 
   if ( filter->MAMPid[0] == 0 ){
     logmsg(stderr, "MPFilterID with invalid MAMPid (null)\n");
