@@ -1,6 +1,6 @@
-MArelayD software
-
-Release 0.something
+MArCd
 
 This listens to MP queries and responds with the MA-Controller information.
 
+1. Create a user/group to run MArCd, by default marc/marc is used.
+2. Put the group in the webgui config as well.

@@ -30,6 +30,10 @@
 #include <cstring>
 #include <getopt.h>
 #include <errno.h>
+
+#include <unistd.h>
+#include <pwd.h>
+#include <grp.h>
  
 #include <mysql.h>
 #include <errmsg.h> /* from mysql */
@@ -45,12 +49,19 @@ static char db_name[64] = {0,};
 static char db_username[64] = {0,};
 static char db_password[64] = {0,};
 
+char* rrdpath;
 static int verbose_flag = 0;
 static int debug_flag = 0;
-static FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
- 
+FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
+
+static int drop_priv_flag = 1;
+static uid_t drop_uid = -1;
+static gid_t drop_gid = -1;
+
 static void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
 static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from);
+void MP_Status2_reset(const char* MAMPid, int noCI);
+void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from);
 static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from);
 static void MP_VerifyFilter(int sd, struct sockaddr from, char buffer[1500]);
 
@@ -58,22 +69,51 @@ static int connect();
 static int convMySQLtoFPI(struct FPI *rule,  MYSQL_RES *result);
 static int inet_atoP(char *dest,char *org);
 
+enum LongFlags {
+  FLAG_DATADIR = 256,
+  FLAG_USER,
+  FLAG_GROUP,
+};
+
 int main(int argc, char *argv[]){
   extern int opterr, optopt;
   int port = LOCAL_SERVER_PORT;
   static struct option long_options[]= {
     {"help", 0, 0, 'v'},
-    {"host",1,0,'h'},
     {"database",1,0, 'd'},
-    {"user",1,0,'u'},
-    {"password",1,0,'p'},
+    {"dbhost",1,0,'h'},
+    {"dbusername",1,0,'u'},
+    {"dbpassword",1,0,'p'},
     {"verbose", 0, &verbose_flag, 1},
     {"debug", 0, &debug_flag, 1},
+    {"datadir", 1, 0, FLAG_DATADIR},
+
+    /* priviledge dropping */
+    {"drop", 0, &drop_priv_flag, 1},
+    {"no-drop", 0, &drop_priv_flag, 0},
+    {"user", 1, 0, FLAG_USER},
+    {"group", 1, 0, FLAG_GROUP},
+
     {0, 0, 0, 0}
   };
   
   opterr=0;
   optopt=0;
+
+  /* defaults */
+  rrdpath = strdup(DATA_DIR);
+  {
+    struct passwd* passwd = getpwnam("marc");
+    if ( passwd ){
+      drop_uid = passwd->pw_uid;
+    }
+  }
+  {
+    struct group* group = getgrnam("marc");
+    if ( group ){
+      drop_gid = group->gr_gid;
+    }
+  }
 
   printf("MArCd " VERSION " (libmarc-" LIBMARC_VERSION ")\n");
 
@@ -92,16 +132,25 @@ int main(int argc, char *argv[]){
       printf("(C) 2004 patrik.arlos@bth.se\n");
       printf("(C) 2011 david.sveningsson@bth.se\n");
       printf("Usage: %s [OPTIONS] DATABASE\n",argv[0]);
-      printf("  -h, --host      MySQL database host. [Default: localhost]\n");
-      printf("      --database  Database name.\n");
-      printf("  -u, --user      Database username. [Default: current user]\n");
-      printf("  -p, --password  Database password, use '-' to read password\n"
-	     "                  from stdin. [Default: none]\n");
-      printf("      --verbose   Verbose output.\n");
-      printf("      --debug     Show extra debugging output, including hexdump\n"
-	     "                  of all incomming and outgoing messages. Implies\n"
-	     "                  verbose output.\n");
-      printf("      --help      This text\n");
+      printf("Database options\n");
+      printf("  -h, --dbhost      MySQL database host. [Default: localhost]\n");
+      printf("      --database    Database name.\n");
+      printf("  -u, --dbusername  Database username. [Default: current user]\n");
+      printf("  -p, --dbpassword  Database password, use '-' to read password\n"
+	     "                    from stdin. [Default: none]\n");
+      printf("\n");
+      printf("Priviledge options\n");
+      printf("      --drop        Drop priviledges. [default]\n");
+      printf("      --no-drop     Inverse of --drop.\n");
+      printf("      --user USER   Change UID to this user. [default: marc]\n");
+      printf("      --group GROUP Change GID to this group. [default: marc]\n");
+      printf("\n");
+      printf("Other\n");
+      printf("      --verbose     Verbose output.\n");
+      printf("      --debug       Show extra debugging output, including hexdump\n"
+	     "                    of all incomming and outgoing messages. Implies\n"
+	     "                    verbose output.\n");
+      printf("      --help        This text\n");
       return 0;
       break;
 
@@ -122,11 +171,19 @@ int main(int argc, char *argv[]){
 
     case 'p':
       if ( strcmp(optarg, "-") == 0 ){ /* read password from stdin */
-	fscanf(stdin, "%63s", db_password);
+	if ( fscanf(stdin, "%63s", db_password) != 1 ){
+	  fprintf(stderr, "Failed to read password.\n");
+	  return 1;
+	}
       } else {
 	strncpy(db_password, optarg, sizeof(db_password));
 	db_password[sizeof(db_password)-1] = '\0';
       }
+      break;
+
+    case FLAG_DATADIR:
+      free(rrdpath);
+      rrdpath = strdup(optarg);
       break;
 
     default:
@@ -165,12 +222,33 @@ int main(int argc, char *argv[]){
     return 1;
   }
 
+  if ( access(rrdpath, W_OK) != 0 ){
+    logmsg(stderr, "Need write persmission to data dir: %s\n", rrdpath);
+    return 1;
+  }
+  logmsg(stderr, "Datadir: %s\n", rrdpath);
+
   /* initialize libmarc */
   int ret;
   marc_context_t marc;
   if ( (ret=marc_init_server(&marc, port)) != 0 ){
     logmsg(stderr, "marc_init_server() returned %d: %s\n", ret, strerror(ret));
     return 1;
+  }
+
+  /* drop priviledges */
+  if ( drop_priv_flag ){
+    if ( getuid() == 0 ){
+      logmsg(stderr, "Dropping priviledges to uid=%d gid=%d\n", drop_uid, drop_gid);
+      if ( setgid(drop_gid) != 0 ){
+	logmsg(stderr, "setgid() failed: %s\n", strerror(errno));
+      }
+      if ( setuid(drop_uid) != 0 ){
+	logmsg(stderr, "setuid() failed: %s\n", strerror(errno));
+      }
+    } else {
+      logmsg(stderr, "Not executing as uid=0, cannot drop priviledges.\n");
+    }
   }
 
   /* wait for events */
@@ -206,6 +284,10 @@ int main(int argc, char *argv[]){
       MP_Status(marc, &event.status, &from);
       break;
 
+    case MP_STATUS2_EVENT:
+      MP_Status2(marc, &event.status2, &from);
+      break;
+
     case MP_FILTER_REQUEST_EVENT:
       MP_GetFilter(marc, &event.filter_id, &from);
       break;
@@ -214,6 +296,8 @@ int main(int argc, char *argv[]){
       logmsg(stderr, "not handling message of type %d\n", event.type);
     }
   }
+
+  free(rrdpath);
 
   return 0;
 }
@@ -357,12 +441,15 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
     if ( !verbose_flag ){
       logmsg(stderr, "MPinitialization request from %s:%d -> not authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
     } else {
-      logmsg(verbose, "This MP exists but is not yet authorized.");
+      logmsg(verbose, "This MP exists but is not yet authorized.\n");
     }
     return;
   } else if (!verbose_flag){
     logmsg(stderr, "MPinitialization request from %s:%d -> authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
   }
+
+  /* reset status counters */
+  MP_Status2_reset(MAMPid, ntohs(MPinit->noCI));
 
   /* Lets check if we have any filters waiting for us? */
   if ( !q("SELECT * from %s_filterlist ORDER BY 'filter_id' ASC ",MAMPid) ){
@@ -393,10 +480,15 @@ static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* fr
     return;
   }
 
+  /* bump timestamp */ {
+    char buf[16*2+1]; /* mampids are 16 bytes, worst-case escape requires n*2 chars + nullterminator */
+    mysql_real_escape_string(&connection, buf, mampid_get(MPstat->MAMPid), strlen(MPstat->MAMPid));
+    q("UPDATE measurementpoints SET time = CURRENT_TIMESTAMP WHERE MAMPid = '%s'", buf);
+  }
+
   q("INSERT INTO %s_CIload SET noFilters='%d', matchedPkts='%d' %s",
     mampid_get(MPstat->MAMPid), ntohl(MPstat->noFilters), ntohl(MPstat->matched), MPstat->CIstats);
 }
-
 
 static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from){
   LOG_EVENT("MPFilterID");
@@ -484,9 +576,9 @@ static int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
   
   rule->IP_PROTO=atoi(row[11]);
   strncpy((char*)rule->IP_SRC,row[12],16);
-  strncpy((char*)rule->IP_SRC_MASK,row[13],17);
-  strncpy((char*)rule->IP_DST,row[14],18);
-  strncpy((char*)rule->IP_DST_MASK,row[15],19);
+  strncpy((char*)rule->IP_SRC_MASK,row[13],16);
+  strncpy((char*)rule->IP_DST,row[14],16);
+  strncpy((char*)rule->IP_DST_MASK,row[15],16);
   
   rule->SRC_PORT=atoi(row[16]);
   rule->SRC_PORT_MASK=atoi(row[17]);
