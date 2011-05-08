@@ -43,6 +43,14 @@
   logmsg(verbose, x " from %s:%d (MAMPid: %s)\n", \
   inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid)
 
+enum MPStatusEnum {
+  MP_STATUS_NOT_AUTH,
+  MP_STATUS_IDLE,
+  MP_STATUS_CAPTURE,
+  MP_STATUS_STOPPED,
+  MP_STATUS_DISTRESS,
+};
+
 static MYSQL connection;
 static char db_hostname[64] = "localhost";
 static int  db_port = MYSQL_PORT;
@@ -65,6 +73,9 @@ void MP_Status2_reset(const char* MAMPid, int noCI);
 void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from);
 static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from);
 static void MP_VerifyFilter(int sd, struct sockaddr from, char buffer[1500]);
+static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr* from);
+
+static void mp_set_status(const char* mampid, enum MPStatusEnum status);
 
 static int connect();
 static int convMySQLtoFPI(struct FPI *rule,  MYSQL_RES *result);
@@ -293,6 +304,10 @@ int main(int argc, char *argv[]){
       MP_GetFilter(marc, &event.filter_id, &from);
       break;
 
+    case MP_CONTROL_DISTRESS:
+      MP_Distress(marc, mampid_get(event.MAMPid), &from);
+      break;
+
     default:
       logmsg(stderr, "not handling message of type %d\n", event.type);
     }
@@ -451,6 +466,9 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   /* reset status counters */
   MP_Status2_reset(MAMPid, ntohs(MPinit->noCI));
 
+  /* register that the MP now is idle (doesn't really matter as heurestics is used for status, but it clears the distress state) */
+  mp_set_status(MAMPid, MP_STATUS_IDLE);
+
   /* Lets check if we have any filters waiting for us? */
   if ( !q("SELECT * from %s_filterlist ORDER BY 'filter_id' ASC ",MAMPid) ){
     return;
@@ -555,6 +573,11 @@ static void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
   return;
 }
 
+static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr* from){
+  logmsg(stderr, "Distress signal from MP (MAMPid: %s)\n", mampid);
+  mp_set_status(mampid, MP_STATUS_DISTRESS);
+}
+
 static int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
   struct Filter* rule = &fpi->filter;
 
@@ -633,4 +656,10 @@ static int inet_atoP(char *dest,char *org){
     k=k+2;
   }
   return 1;
+}
+
+static void mp_set_status(const char* mampid, enum MPStatusEnum status){
+  char buf[16*2+1]; /* mampids are 16 bytes, worst-case escape requires n*2 chars + nullterminator */
+  mysql_real_escape_string(&connection, buf, mampid, strlen(mampid));
+  q("UPDATE measurementpoints SET status = %d WHERE MAMPid = '%s'", status, buf);
 }
