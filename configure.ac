@@ -15,6 +15,7 @@ pkgdatadir="${localstatedir}/lib/marc"
 AC_SUBST(pkgdatadir)
 AX_DEFINE_DIR([DATA_DIR], [pkgdatadir], [Directory where datafiles are stored])
 
+PKG_PROG_PKG_CONFIG
 PKG_CHECK_MODULES([libmarc], [libmarc >= 0.7])
 
 AC_OUTPUT
