@@ -5,3 +5,6 @@ bin_PROGRAMS = MArCd
 MArCd_CXXFLAGS = -Wall ${MYSQL_CLIENT_CFLAGS} ${libmarc_CFLAGS} ${RRDTOOL_CFLAGS}
 MArCd_LDADD = ${MYSQL_CLIENT_LIBS} ${libmarc_LIBS} ${RRDTOOL_LIBS}
 MArCd_SOURCES = main.cpp status.cpp
+
+install-exec-hook:
+	install -d ${DESTDIR}${pkgdatadir}
