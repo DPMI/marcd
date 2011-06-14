@@ -8,14 +8,21 @@ AC_CONFIG_FILES([Makefile])
 
 AC_PROG_CXX
 AC_GNU_SOURCE
-MYSQL_CLIENT
-AX_RRDTOOL
+PKG_PROG_PKG_CONFIG
+
+AC_ARG_WITH([daemon], [AS_HELP_STRING([--with-daemon], [Build MArCd @<:@default=enabled@:>@])])
+AC_ARG_WITH([relay],  [AS_HELP_STRING([--with-relay],  [Build MArelayD @<:@default=enabled@:>@])])
 
 pkgdatadir="${localstatedir}/lib/marc"
 AC_SUBST(pkgdatadir)
 AX_DEFINE_DIR([DATA_DIR], [pkgdatadir], [Directory where datafiles are stored])
 
-PKG_PROG_PKG_CONFIG
-PKG_CHECK_MODULES([libmarc], [libmarc >= 0.7])
+AS_IF([test "x$with_daemon" != "xno"], [
+	MYSQL_CLIENT
+	AX_RRDTOOL
+	PKG_CHECK_MODULES([libmarc], [libmarc >= 0.7])
+])
+AM_CONDITIONAL(BUILD_DAEMON, [test "x$with_daemon" != "xno"])
+AM_CONDITIONAL(BUILD_RELAY,  [test "x$with_relay" != "xno"])
 
 AC_OUTPUT
