@@ -482,7 +482,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   mp_set_status(MAMPid, MP_STATUS_IDLE);
 
   /* Lets check if we have any filters waiting for us? */
-  if ( !q("SELECT * from %s_filterlist ORDER BY 'filter_id' ASC ",MAMPid) ){
+  if ( !q("SELECT * FROM `%s_filterlist` ORDER BY `filter_id` ASC", MAMPid) ){
     return;
   }
 
