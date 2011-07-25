@@ -49,9 +49,7 @@ int MYSQL_PORT = 3306;
 int MARC_PORT= 1600;
 
 int main(int argc, char *argv[]){
-  extern int optind, opterr, optopt;
   register int op;
-  int this_option_optind;
   int option_index;
   int requiredARG=0;
   static struct option long_options[]= {
@@ -66,7 +64,7 @@ int main(int argc, char *argv[]){
     {0, 0, 0, 0}
   };
   
-  int sd, rc, n, cliLen,option, counter;
+  int sd, n, cliLen, counter;
   struct sockaddr_in cliAddr, servAddr;
   char msg[MAX_MSG];
   char *serv=(char*)malloc(17);
@@ -75,15 +73,12 @@ int main(int argc, char *argv[]){
   sprintf(serv,"255.255.255.255");
   sprintf(myInfo.database,"measproj");
   sprintf(myInfo.user,"genmp");
-  sprintf(myInfo.password,"");
+  memset(myInfo.password, 0, 64);
   myInfo.port=MYSQL_PORT;
   myInfo.version=2;
   myInfo.portUDP=MARC_PORT;
-  option=1;
-
 
   for(;;) {
-    this_option_optind = optind ? optind : 1;
     option_index = 0;
     
     op = getopt_long  (argc, argv, "b:p:m:shd:u:v:t:",
@@ -200,7 +195,7 @@ int main(int argc, char *argv[]){
        	 	hisInfo=(struct MAINFO*)msg;
        		printf("[%d]\t MArC request from %s:%d.\n",counter,inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port));
 		printf("\t MP Listens to (UDP) %s:%d\n",hisInfo->address,ntohs(hisInfo->port));
-		printf("\t MArC: %s (%d/%d) database %s %s/",myInfo.address, myInfo.port, myInfo.portUDP, myInfo.database, myInfo.user, myInfo.password);
+		printf("\t MArC: %s (%d/%d) database %s %s/",myInfo.address, myInfo.port, myInfo.portUDP, myInfo.database, myInfo.user);
 		if(strlen(myInfo.password)==0){
 		  printf("#NO#\n");
 		} else {
