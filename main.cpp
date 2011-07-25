@@ -78,8 +78,13 @@ static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr
 static void mp_set_status(const char* mampid, enum MPStatusEnum status);
 
 static int connect();
-static int convMySQLtoFPI(struct FPI *rule,  MYSQL_RES *result);
+static int convMySQLtoFPI(struct filter* dst,  MYSQL_RES* src);
 static int inet_atoP(char *dest,char *org);
+
+static char* inet_ntoa_r(struct in_addr in, char* dst){
+  strcpy(dst, inet_ntoa(in));
+  return dst;
+}
 
 enum LongFlags {
   FLAG_DATADIR = 256,
@@ -334,20 +339,18 @@ static int connect(){
  * @return Zero on error.
  */
 static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sockaddr* dst, const char* MAMPid){
-  struct FPI fpi;
   struct MPFilter MPfilter;
-  
-  if ( !convMySQLtoFPI(&fpi, result) ){
+  struct filter filter;
+
+  if ( !convMySQLtoFPI(&filter, result) ){
     return 0;
   }
-
-  struct Filter* filter = &fpi.filter;
   
   MPfilter.type = MP_FILTER_EVENT;
   mampid_set(MPfilter.MAMPid, MAMPid);
-  marc_filter_pack(filter, &MPfilter.filter);
+  marc_filter_pack(&filter, &MPfilter.filter);
   
-  logmsg(verbose, "Sending Filter {%d} to to MP %s.\n", filter->filter_id, mampid_get(MPfilter.MAMPid));
+  logmsg(verbose, "Sending Filter {%d} to to MP %s.\n", filter.filter_id, mampid_get(MPfilter.MAMPid));
 
   if ( debug_flag ){
     hexdump(verbose, (char*)&MPfilter, sizeof(struct MPFilter));
@@ -548,31 +551,38 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
 
 static void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
   char statusQ[2000];
-  static char buf[100];
+  static char buf[200];
   char *query;
   query=statusQ;
   bzero(statusQ,sizeof(statusQ));
   struct MPVerifyFilter* MyVerify=(struct MPVerifyFilter*)buffer;
-  struct FilterPacked* F = &MyVerify->filter;
+  struct filter_packed* f = &MyVerify->filter;
   if(MyVerify->flags==0) {
     sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', comment='NOT PRESENT'", MyVerify->MAMPid,MyVerify->filter_id); 
   } else {
     sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', ind='%d', CI_ID='%s', VLAN_TCI='%d', VLAN_TCI_MASK='%d',ETH_TYPE='%d', ETH_TYPE_MASK='%d',ETH_SRC='%s',ETH_SRC_MASK='%s', ETH_DST='%s', ETH_DST_MASK='%s',IP_PROTO='%d', IP_SRC='%s', IP_SRC_MASK='%s', IP_DST='%s', IP_DST_MASK='%s', SRC_PORT='%d', SRC_PORT_MASK='%d', DST_PORT='%d', DST_PORT_MASK='%d', TYPE='%d', CAPLEN='%d', consumer='%d'",
-	    MyVerify->MAMPid,F->filter_id,F->index,F->CI_ID,F->VLAN_TCI,F->VLAN_TCI_MASK,
-	    F->ETH_TYPE,F->ETH_TYPE_MASK,
-	    hexdump_address_r(&F->ETH_SRC, &buf[0]), hexdump_address_r(&F->ETH_SRC_MASK, &buf[17]),
-	    hexdump_address_r(&F->ETH_DST, &buf[0]), hexdump_address_r(&F->ETH_DST_MASK, &buf[17]),
-	    F->IP_PROTO,
-	    F->IP_SRC,F->IP_SRC_MASK,F->IP_DST,F->IP_DST_MASK,
-	    F->SRC_PORT,F->SRC_PORT_MASK,F->DST_PORT,F->DST_PORT_MASK,
-	    F->TYPE, 
-	    F->CAPLEN,
-	    F->consumer);
+	    MyVerify->MAMPid, f->filter_id, f->index, f->iface, f->vlan_tci, f->vlan_tci_mask,
+	    f->eth_type,f->eth_type_mask,
+	    hexdump_address_r(&f->eth_src, &buf[0]), hexdump_address_r(&f->eth_src_mask, &buf[17]),
+	    hexdump_address_r(&f->eth_dst, &buf[34]), hexdump_address_r(&f->eth_dst_mask, &buf[51]),
+	    f->ip_proto,
+	    inet_ntoa_r(f->ip_src, &buf[ 68]), inet_ntoa_r(f->ip_src_mask, &buf[ 85]),
+	    inet_ntoa_r(f->ip_dst, &buf[102]), inet_ntoa_r(f->ip_dst_mask, &buf[119]),
+	    f->src_port,f->src_port_mask,f->dst_port,f->dst_port_mask,
+	    f->type, 
+	    f->caplen,
+	    f->consumer);
       
-    if(F->TYPE==1) {
-      sprintf(query,"%s, DESTADDR='%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X' ",query, (unsigned char)(F->DESTADDR[0]),(unsigned char)(F->DESTADDR[1]),(unsigned char)(F->DESTADDR[2]),(unsigned char)(F->DESTADDR[3]),(unsigned char)(F->DESTADDR[4]),(unsigned char)(F->DESTADDR[5]));
+    if(f->type==1) {
+      sprintf(query, "%s, DESTADDR='%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X' ", query,
+	      (unsigned char)(f->destaddr[0]),
+	      (unsigned char)(f->destaddr[1]),
+	      (unsigned char)(f->destaddr[2]),
+	      (unsigned char)(f->destaddr[3]),
+	      (unsigned char)(f->destaddr[4]),
+	      (unsigned char)(f->destaddr[5]));
     } else {
-      sprintf(query,"%s, DESTADDR='%s' ",query, F->DESTADDR);
+      sprintf(query,"%s, DESTADDR='%s' ",query, f->destaddr);
     }
   }
 
@@ -590,9 +600,7 @@ static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr
   mp_set_status(mampid, MP_STATUS_DISTRESS);
 }
 
-static int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
-  struct Filter* rule = &fpi->filter;
-
+static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
   char *pos=0;
   MYSQL_ROW row = mysql_fetch_row(result);
 
@@ -602,51 +610,51 @@ static int convMySQLtoFPI(struct FPI *fpi,  MYSQL_RES *result){
 
   rule->filter_id=atoi(row[0]);
   rule->index=atoi(row[1]);
-  strncpy(rule->CI_ID,row[2],8);
-  rule->VLAN_TCI=atol(row[3]);
-  rule->VLAN_TCI_MASK=atol(row[4]);
-  rule->ETH_TYPE=atol(row[5]);
-  rule->ETH_TYPE_MASK=atol(row[6]);
+  strncpy(rule->iface, row[2], 8);
+  rule->vlan_tci=atol(row[3]);
+  rule->vlan_tci_mask=atol(row[4]);
+  rule->eth_type=atol(row[5]);
+  rule->eth_type_mask=atol(row[6]);
   
   
-  rule->IP_PROTO=atoi(row[11]);
-  strncpy((char*)rule->IP_SRC,row[12],16);
-  strncpy((char*)rule->IP_SRC_MASK,row[13],16);
-  strncpy((char*)rule->IP_DST,row[14],16);
-  strncpy((char*)rule->IP_DST_MASK,row[15],16);
+  rule->ip_proto=atoi(row[11]);
+  rule->ip_src.s_addr = inet_addr(row[12]);
+  rule->ip_src_mask.s_addr = inet_addr(row[13]);
+  rule->ip_dst.s_addr = inet_addr(row[14]);
+  rule->ip_dst_mask.s_addr = inet_addr(row[15]);
   
-  rule->SRC_PORT=atoi(row[16]);
-  rule->SRC_PORT_MASK=atoi(row[17]);
-  rule->DST_PORT=atoi(row[18]);
-  rule->DST_PORT_MASK=atoi(row[19]);
+  rule->src_port=atoi(row[16]);
+  rule->src_port_mask=atoi(row[17]);
+  rule->dst_port=atoi(row[18]);
+  rule->dst_port_mask=atoi(row[19]);
   rule->consumer=atoi(row[20]);
   
-  inet_atoP((char*)rule->ETH_SRC.ether_addr_octet,row[7]);
-  inet_atoP((char*)rule->ETH_SRC_MASK.ether_addr_octet,row[8]);
-  inet_atoP((char*)rule->ETH_DST.ether_addr_octet,row[9]);
-  inet_atoP((char*)rule->ETH_DST_MASK.ether_addr_octet,row[10]);
+  inet_atoP((char*)rule->eth_src.ether_addr_octet,row[7]);
+  inet_atoP((char*)rule->eth_src_mask.ether_addr_octet,row[8]);
+  inet_atoP((char*)rule->eth_dst.ether_addr_octet,row[9]);
+  inet_atoP((char*)rule->eth_dst_mask.ether_addr_octet,row[10]);
 
-  rule->TYPE=atoi(row[22]);
-  rule->CAPLEN=atoi(row[23]);
+  rule->type=atoi(row[22]);
+  rule->caplen=atoi(row[23]);
 
-  switch(rule->TYPE){
+  switch(rule->type){
   case 3: // TCP
   case 2: // UDP
     // DESTADDR is ipaddress:port
-    strncpy((char*)rule->DESTADDR,row[21],22);
-    pos=index((char*)rule->DESTADDR,':');
+    strncpy((char*)rule->destaddr,row[21],22);
+    pos=index((char*)rule->destaddr,':');
     if(pos!=NULL) {
       *pos=0;
-      rule->DESTPORT=atoi(pos+1);
+      rule->destport=atoi(pos+1);
     } else {
-      rule->DESTPORT=0x0810;
+      rule->destport=0x0810;
     }
     break;
   case 1: // Ethernet
-    inet_atoP((char*)rule->DESTADDR,row[21]);
+    inet_atoP((char*)rule->destaddr,row[21]);
     break;
   case 0: // File
-    strncpy((char*)rule->DESTADDR,row[21],22);
+    strncpy((char*)rule->destaddr,row[21],22);
     break;
   }
 
