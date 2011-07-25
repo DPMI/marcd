@@ -9,11 +9,18 @@
 #include <rrd.h>
 #endif
 
+#include <cassert>
+
 extern char* rrdpath;
 extern FILE* verbose;
 
 #ifdef HAVE_RRDTOOL
 static void update(char* b1, char* b2, const char* when, const char* MAMPid, int CI, long packets, long matched){
+  assert(b1);
+  assert(b2);
+  assert(when);
+  assert(MAMPid);
+
   static char cmd[] = "update";
   static char separator[] = "--";
   char* argv[] = {
@@ -73,6 +80,9 @@ void MP_Status2_reset(const char* MAMPid, int noCI){
 }
 
 void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from){
+  assert(MPstat);
+  assert(from);
+
   const char* mampid = mampid_get(MPstat->MAMPid);
 
   logmsg(verbose, "Extended status from %s:%d (MAMPid: %s)\n",
