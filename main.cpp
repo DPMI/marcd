@@ -351,6 +351,7 @@ static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sock
   marc_filter_pack(&filter, &MPfilter.filter);
   
   logmsg(verbose, "Sending Filter {%d} to to MP %s.\n", filter.filter_id, mampid_get(MPfilter.MAMPid));
+  printf("dest: %s(%d)\n", destination_ntoa(&filter.dest), filter.dest.type);
 
   if ( debug_flag ){
     hexdump(verbose, (char*)&MPfilter, sizeof(struct MPFilter));
@@ -569,21 +570,11 @@ static void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
 	    inet_ntoa_r(f->ip_src, &buf[ 68]), inet_ntoa_r(f->ip_src_mask, &buf[ 85]),
 	    inet_ntoa_r(f->ip_dst, &buf[102]), inet_ntoa_r(f->ip_dst_mask, &buf[119]),
 	    f->src_port,f->src_port_mask,f->dst_port,f->dst_port_mask,
-	    f->type, 
+	    f->dest.type, 
 	    f->caplen,
 	    f->consumer);
       
-    if(f->type==1) {
-      sprintf(query, "%s, DESTADDR='%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X' ", query,
-	      (unsigned char)(f->destaddr[0]),
-	      (unsigned char)(f->destaddr[1]),
-	      (unsigned char)(f->destaddr[2]),
-	      (unsigned char)(f->destaddr[3]),
-	      (unsigned char)(f->destaddr[4]),
-	      (unsigned char)(f->destaddr[5]));
-    } else {
-      sprintf(query,"%s, DESTADDR='%s' ",query, f->destaddr);
-    }
+    sprintf(query, "%s, DESTADDR='%s' ", query, destination_ntoa(&f->dest));
   }
 
   printf("MP_VerifyFilter():\n%s\n",query);
@@ -601,7 +592,6 @@ static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr
 }
 
 static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
-  char *pos=0;
   MYSQL_ROW row = mysql_fetch_row(result);
 
   if ( !row ){ /* no more rows */
@@ -634,29 +624,13 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
   inet_atoP((char*)rule->eth_dst.ether_addr_octet,row[9]);
   inet_atoP((char*)rule->eth_dst_mask.ether_addr_octet,row[10]);
 
-  rule->type=atoi(row[22]);
   rule->caplen=atoi(row[23]);
 
-  switch(rule->type){
-  case 3: // TCP
-  case 2: // UDP
-    // DESTADDR is ipaddress:port
-    strncpy((char*)rule->destaddr,row[21],22);
-    pos=index((char*)rule->destaddr,':');
-    if(pos!=NULL) {
-      *pos=0;
-      rule->destport=atoi(pos+1);
-    } else {
-      rule->destport=0x0810;
-    }
-    break;
-  case 1: // Ethernet
-    inet_atoP((char*)rule->destaddr,row[21]);
-    break;
-  case 0: // File
-    strncpy((char*)rule->destaddr,row[21],22);
-    break;
-  }
+  const char* destination = row[21];
+  enum DestinationType type = (enum DestinationType)atoi(row[22]);
+  destination_aton(&rule->dest, destination, type);
+
+  printf("%s(%d) -> %s(%d)\n", destination, type, destination_ntoa(&rule->dest), rule->dest.type);
 
   return 1;
 }
