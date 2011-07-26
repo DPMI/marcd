@@ -351,7 +351,6 @@ static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sock
   marc_filter_pack(&filter, &MPfilter.filter);
   
   logmsg(verbose, "Sending Filter {%d} to to MP %s.\n", filter.filter_id, mampid_get(MPfilter.MAMPid));
-  printf("dest: %s(%d)\n", destination_ntoa(&filter.dest), filter.dest.type);
 
   if ( debug_flag ){
     hexdump(verbose, (char*)&MPfilter, sizeof(struct MPFilter));
@@ -629,8 +628,6 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
   const char* destination = row[21];
   enum DestinationType type = (enum DestinationType)atoi(row[22]);
   destination_aton(&rule->dest, destination, type);
-
-  printf("%s(%d) -> %s(%d)\n", destination, type, destination_ntoa(&rule->dest), rule->dest.type);
 
   return 1;
 }
