@@ -627,7 +627,7 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
 
   const char* destination = row[21];
   enum DestinationType type = (enum DestinationType)atoi(row[22]);
-  destination_aton(&rule->dest, destination, type);
+  destination_aton(&rule->dest, destination, type, 0);
 
   return 1;
 }
