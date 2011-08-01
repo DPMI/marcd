@@ -135,6 +135,6 @@ void Daemon::join(){
 }
 
 void Daemon::interupt(){
-  char ch = 0;
+  static const char ch = 0;
   write(pipe[1], &ch, 1);
 }
