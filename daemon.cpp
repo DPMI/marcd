@@ -136,5 +136,8 @@ void Daemon::join(){
 
 void Daemon::interupt(){
   static const char ch = 0;
-  write(pipe[1], &ch, 1);
+  if ( write(pipe[1], &ch, 1) < 0 ){
+    /* shouldn't just print this on stderr, but better than silently ignoring it */
+    fprintf(stderr, "write() returned %d: %s\n", errno, strerror(errno));
+  }
 }
