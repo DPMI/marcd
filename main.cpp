@@ -48,7 +48,8 @@ int ma_relay_port = MA_RELAY_DEFAULT_PORT;
 
 char* rrdpath;
 char* iface = NULL;
-in_addr listen_addr = { htonl(INADDR_ANY) };
+in_addr listen_addr;
+in_addr control_addr;
 int verbose_flag = 0;
 int debug_flag = 0;
 FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
@@ -158,6 +159,7 @@ static void setup_output(){
 }
 
 static void default_env(){
+  listen_addr.s_addr = htonl(INADDR_ANY);
   rrdpath = strdup(DATA_DIR);
   struct passwd* passwd = getpwnam("marc");
   struct group* group = getgrnam("marc");
@@ -328,7 +330,8 @@ int main(int argc, char *argv[]){
   threads += (int)have_control_daemon;
   threads += (int)have_relay_daemon;
   pthread_barrier_init(&barrier, NULL, threads);
-
+  control_addr.s_addr = listen_addr.s_addr;
+  
   if ( have_control_daemon && (ret=Daemon::instantiate<Control>(200, &barrier)) != 0 ){
     logmsg(stderr, "Failed to initialize control daemon, terminating.\n");
     return ret;

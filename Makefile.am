@@ -11,10 +11,18 @@ bin_PROGRAMS += MArelayD
 endif
 
 MArCd_CXXFLAGS = -Wall -pthread ${MYSQL_CLIENT_CFLAGS} ${libmarc_CFLAGS} ${RRDTOOL_CFLAGS}
-MArCd_LDADD = libcommon.a ${MYSQL_CLIENT_LIBS} ${libmarc_LIBS} ${RRDTOOL_LIBS}
-MArCd_SOURCES = daemon.cpp database.cpp control.cpp relay.cpp status.cpp utils.cpp main.cpp
+MArCd_LDADD = ${MYSQL_CLIENT_LIBS} ${libmarc_LIBS} ${RRDTOOL_LIBS}
+MArCd_SOURCES = \
+	daemon.cpp daemon.h \
+	database.cpp database.h \
+	control.cpp control.h \
+	relay.cpp relay.h \
+	status.cpp \
+	utils.cpp utils.h \
+	main.cpp
 
 MArelayD_CXXFLAGS = -Wall -DBUILD_RELAY ${libmarc_CFLAGS}
+MArelayD_LDADD = ${libmarc_LIBS}
 MArelayD_SOURCES = relay.cpp
 
 install-exec-hook:

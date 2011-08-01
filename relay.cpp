@@ -45,6 +45,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <sys/ioctl.h>
+#include <cassert>
 
 #define MAX_MSG 1500
 
@@ -53,6 +54,7 @@ extern const char* iface;
 extern int ma_control_port;
 extern int ma_relay_port;
 extern in_addr listen_addr;
+extern in_addr control_addr;
 extern bool volatile keep_running;
 
 struct MAINFO {
@@ -95,10 +97,13 @@ int Relay::init(){
   }
 
   logmsg(verbose, "[ relay ] Relay info:\n");
-  logmsg(verbose, "[ relay ]   MArC: %s (%d/%d)\n", inet_ntoa(listen_addr), ma_relay_port, ma_control_port);
-  logmsg(verbose, "[ relay ]   Database: %s\n", db_name);
-  logmsg(verbose, "[ relay ]   User: %s\n", db_username);
-  logmsg(verbose, "[ relay ]   Password: %s\n", db_password);
+  logmsg(verbose, "[ relay ]   MArC: %s:%d\n", inet_ntoa(control_addr), ma_control_port);
+  if ( db_name[0] == 0 ){
+    logmsg(verbose, "[ relay ]   Database: unset\n");
+  } else {
+    logmsg(verbose, "[ relay ]   Database: mysql://%s%s%s:%d/%s (using password: %s)\n",
+	   db_username, db_username[0] ? "@" : "", db_hostname, db_port, db_name, db_password[0] != 0 ? "YES" : "NO");
+  }
 
   return 0;
 }
@@ -114,8 +119,7 @@ int Relay::run(){
   struct sockaddr_in from;
 
   self.version = 2;
-  strncpy(self.address, inet_ntoa(listen_addr), 16);
-  self.port = MYSQL_PORT;
+  strncpy(self.address, inet_ntoa(control_addr), 16);
   strncpy(self.database, db_name, 64);
   strncpy(self.user, db_username, 64);
   strncpy(self.password, db_password, 64);
@@ -163,150 +167,127 @@ int Relay::run(){
 }
 
 #ifdef BUILD_RELAY
+
+int ma_control_port = MA_CONTROL_DEFAULT_PORT;
+int ma_relay_port = MA_RELAY_DEFAULT_PORT;
+in_addr listen_addr;
+in_addr control_addr;
+int verbose_flag = 0;
+int debug_flag = 0;
+FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
+bool volatile keep_running = true;
+
+char db_hostname[64] = "localhost";
+int  db_port = 3306;
+char db_name[64] = {0,};
+char db_username[64] = {0,};
+char db_password[64] = {0,};
+
+static struct option long_options[]= {
+  {"bcast",1,0,'b'},
+  {"port", 1, 0, 'p'},
+  {"MACip", 1, 0, 'm'},
+  {"mport", 1, 0, 's'},
+  {"uport", 1, 0, 't'},
+  {"database", 1,0 ,'d'},
+  {"user",1,0,'u'},
+  {"help", 0, 0, 'h'},
+  {"verbose", 0, &verbose_flag, 1},
+  {"quiet", 0, &verbose_flag, 0},
+  {"debug", 0, &debug_flag, 1},
+  {0, 0, 0, 0}
+};
+
 int main(int argc, char *argv[]){
   register int op;
-  int option_index;
-  int requiredARG=0;
-  static struct option long_options[]= {
-    {"bcast",1,0,'b'},
-    {"port", 1, 0, 'p'},
-    {"MACip", 1, 0, 'm'},
-    {"mport", 1, 0, 's'},
-    {"uport", 1, 0, 't'},
-    {"database", 1,0 ,'d'},
-    {"user",1,0,'u'},
-    {"help", 0, 0, 'h'},
-    {0, 0, 0, 0}
-  };
-  
-  int sd, n, cliLen, counter;
-  struct sockaddr_in cliAddr, servAddr;
+  int option_index = 0;
 
-  char *serv=(char*)malloc(17);
-  struct MAINFO myInfo,*hisInfo;
-  sprintf(myInfo.address,"192.168.0.159");
-  sprintf(serv,"255.255.255.255");
-  sprintf(myInfo.database,"measproj");
-  sprintf(myInfo.user,"genmp");
-  memset(myInfo.password, 0, 64);
-  myInfo.port=MYSQL_PORT;
-  myInfo.version=2;
-  myInfo.portUDP=MARC_PORT;
-
-  for(;;) {
-    option_index = 0;
-    
-    op = getopt_long  (argc, argv, "b:p:m:shd:u:v:t:",
-		       long_options, &option_index);
-    if (op == -1)
+  while ( (op = getopt_long(argc, argv, "b:p:m:s:hd:u:v:t:", long_options, &option_index)) != -1 ){  
+    switch (op){
+    case 0:   /* long opt */
+    case '?': /* unknown opt */
       break;
-    
-    switch (op)        {
-      case 'b':
-	free(serv);
-	serv=(char*)malloc(strlen(optarg)+1);
-	strcpy(serv,optarg);
-	break;
 
-      case 'd':
-	bzero(myInfo.database,sizeof(myInfo.database));
-	strncpy(myInfo.database,optarg,64);
-	break;
+    case 'b':
+      fprintf(stderr, "--bcast is not implemented\n");
+      break;
+      
+    case 'd':
+      strncpy(db_name, optarg, sizeof(db_name));
+      db_name[sizeof(db_name)-1] = '\0';
+      break;
+      
+    case 'u':
+      strncpy(db_username, optarg, sizeof(db_username));
+      db_username[sizeof(db_username)-1] = '\0';
+      break;
+      
+    case 'v':
+      if ( strcmp(optarg, "-") == 0 ){ /* read password from stdin */
+	if ( fscanf(stdin, "%63s", db_password) != 1 ){
+	  fprintf(stderr, "Failed to read password.\n");
+	  return 1;
+	}
+      } else {
+	strncpy(db_password, optarg, sizeof(db_password));
+	db_password[sizeof(db_password)-1] = '\0';
+      }
+      break;
 
-      case 'u':
-	bzero(myInfo.user,sizeof(myInfo.user));
-	strncpy(myInfo.user,optarg,64);
-	break;
+    case 'p':
+      ma_relay_port = atoi(optarg);
+      break;
+      
+    case 's':
+      db_port = atoi(optarg);
+      break;
 
-      case 'v':
-	bzero(myInfo.password,sizeof(myInfo.password));
-	strncpy(myInfo.password,optarg,64);
-	break;
+    case 't':
+      ma_control_port = atoi(optarg);
+      break;
+      
+    case 'm':      
+      inet_aton(optarg, &control_addr);
+      break;
+      
+    case 'h':
+      printf("help\n");
+      printf("usage: %s [options] filename\n",argv[0]);
+      printf("  -b, --bcast    Broadcast address to listen [default 255.255.255.255] (not implemented).\n");
+      printf("  -p, --port     Portnumber to listen [default %d]\n", MA_RELAY_DEFAULT_PORT);
+      printf("  -m, --MACip    MA-Controller IP, dotted decimal IPv4. [REQUIRED]\n");
+      printf("  -t             MA-Controller port [default %d]\n", MA_CONTROL_DEFAULT_PORT);
+      printf("  -s, --mport	 MySQL port number [default 3306]\n");
+      printf("  -d, --database Database.\n");
+      printf("  -u, --user	 Username.\n");
+      printf("  -v, --password Password.\n");
+      printf("  -h, --help	 this text\n");
+      printf("      --verbose  Verbose output\n");
+      printf("      --quiet    Inverse of --verbose\n");
+      printf("      --debug    Show debugging output\n");
+      exit(0);
+      break;
 
-      case 'p':
-	LOCAL_SERVER_PORT=atoi(optarg);
-	break;
-
-      case 'q':
-	MYSQL_PORT=atoi(optarg);
-	break;
-      case 't':
-	MARC_PORT=atoi(optarg);
-	break;
-	
-      case 'm':
-	bzero(myInfo.address,sizeof(myInfo.address));
-	strncpy(myInfo.address,optarg,16);
-	requiredARG=1;
-	break;
-	
-      case 'h':
-	printf("help\n");
-	printf("usage: %s [options] filename\n",argv[0]);
-	printf("-b or --bcast    Broadcast address to listen [default 255.255.255.255].\n");
-	printf("-p or --port     Portnumber to listen [default 1500]\n");
-	printf("-m or --MACip    MA-Controller IP, dotted decimal IPv4. [REQUIRED]\n");
-	printf("-s or --mport    MySQL port number [default 3306]\n");
-	printf("-d or --database Database.\n");
-	printf("-u or --user     Username.\n");
-	printf("-v or --password Password.\n");
-	printf("-h or --help     this text\n");
-	exit(0);
-	break;	
-      default:
-	printf ("?? getopt returned character code 0%o ??\n", op);
+    default:
+      fprintf(stderr, "getopt returned character code %d\n", op);
+      assert(0 && "declared but unhandled argument");
     }
   }
 
-  if(requiredARG==0){
-    printf("You must supply a IP address to the MA-Controller.\n");
-    free(serv);
+  if ( control_addr.s_addr == 0 ){
+    fprintf(stderr, "You must supply a IP address to the MA-Controller.\n");
     exit(1);
   }
+
+  verbose_flag |= debug_flag;
+  verbose = verbose_flag ? stdout : fopen("/dev/null", "w");
 
   Relay relay;
   relay.init();
   relay.run();
   relay.cleanup();
 
-  counter=0;
-  /* server infinite loop */
-  for(;;)
-     {
-
-        /* init buffer */
-        memset(msg,0x0,MAX_MSG);
-
-        /* receive message */
-        cliLen = sizeof(cliAddr);
-        n = recvfrom(sd, msg, MAX_MSG, 0, (struct sockaddr *) &cliAddr,(socklen_t*) &cliLen);
-
-        if(n<0){
-        /*  printf("%s: cannot receive data \n",argv[0]); */
-          continue;
-        } else {
-	        /* print received message */
-       	 	counter++;
-       	 	hisInfo=(struct MAINFO*)msg;
-       		printf("[%d]\t MArC request from %s:%d.\n",counter,inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port));
-		printf("\t MP Listens to (UDP) %s:%d\n",hisInfo->address,ntohs(hisInfo->port));
-		printf("\t MArC: %s (%d/%d) database %s %s/",myInfo.address, myInfo.port, myInfo.portUDP, myInfo.database, myInfo.user);
-		if(strlen(myInfo.password)==0){
-		  printf("#NO#\n");
-		} else {
-		  printf("%s\n", myInfo.password);
-		}
-	}
-	n=sendto(sd, &myInfo, sizeof(struct MAINFO),0,(struct sockaddr*)&cliAddr,sizeof(cliAddr));
-	if(n==-1) {
-	  perror("Cannot send reply.\n");
-	  exit(1);
-	}
-//	printf("Sent %d bytes.\n",n);
-      }/* end of server infinite loop */
-
-return 0;
-
+  return 0;
 }
 
 #endif /* BUILD_RELAY */
