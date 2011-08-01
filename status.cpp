@@ -49,7 +49,7 @@ static void update(char* b1, char* b2, const char* when, const char* MAMPid, int
   snprintf(b2, 1024, "%s:%s:%s", when, v1, v2);
 
   unsigned int argc = 4;
-  logmsg(verbose, "    Executing \"rrdtool");
+  logmsg(verbose, "[control]    Executing \"rrdtool");
   for ( unsigned int i = 0; i < argc; i++ ){
     /* using fprintf to continue line */
     fprintf(verbose, " %s", argv[i]);
@@ -58,7 +58,7 @@ static void update(char* b1, char* b2, const char* when, const char* MAMPid, int
 
   rrd_clear_error();
   if ( rrd_update(argc, argv) < 0 ){
-    logmsg(stderr, "    rrd_update() failed: %s\n", rrd_get_error());
+    logmsg(stderr, "[control]    rrd_update() failed: %s\n", rrd_get_error());
   }  
 }
 #endif /* HAVE_RRDTOOL */
@@ -68,7 +68,7 @@ void MP_Status2_reset(const char* MAMPid, int noCI){
   char b1[1024];
   char b2[1024];
 
-  logmsg(verbose, "Resetting RRD counters for %s\n", MAMPid);
+  logmsg(verbose, "[control] Resetting RRD counters for %s\n", MAMPid);
   update(b1, b2, "-1", MAMPid, -1, -1, -1);
   update(b1, b2, "N", MAMPid, -1, 0, 0);
   
@@ -85,7 +85,7 @@ void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from){
 
   const char* mampid = mampid_get(MPstat->MAMPid);
 
-  logmsg(verbose, "Extended status from %s:%d (MAMPid: %s)\n",
+  logmsg(verbose, "[control] Extended status from %s:%d (MAMPid: %s)\n",
 	 inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid);
 
 #ifdef HAVE_RRDTOOL

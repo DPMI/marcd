@@ -276,11 +276,11 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
     if ( !verbose_flag ){
       logmsg(stderr, "[control] MPinitialization request from %s:%d -> not authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
     } else {
-      logmsg(verbose, "This MP exists but is not yet authorized.\n");
+      logmsg(verbose, "[control] This MP exists but is not yet authorized.\n");
     }
     return;
   } else if (!verbose_flag){
-    logmsg(stderr, "MPinitialization request from %s:%d -> authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
+    logmsg(stderr, "[control] MPinitialization request from %s:%d -> authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
   }
 
   /* reset status counters */
@@ -296,7 +296,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
   result = mysql_store_result(&connection);
   int rows = (int)mysql_num_rows(result);
-  logmsg(verbose, "MP %s has %d filters assigned.\n", MAMPid, rows);
+  logmsg(verbose, "[control] MP %s has %d filters assigned.\n", MAMPid, rows);
   
   /*process each row*/  
   for( int n=0; n < rows; n++ ){
@@ -306,7 +306,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   /* free the result set */
   mysql_free_result(result);
 
-  logmsg(verbose, "MP_init done.\n");
+  logmsg(verbose, "[control] MP_init done.\n");
   return;
 }
 
@@ -314,7 +314,7 @@ static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* fr
   LOG_EVENT("MPstatus", mampid_get(MPstat->MAMPid));
   
   if ( MPstat->MAMPid[0] == 0 ){
-    logmsg(stderr, "MPstat with invalid MAMPid (null)\n");
+    logmsg(stderr, "[control] MPstat with invalid MAMPid (null)\n");
     return;
   }
 
@@ -332,7 +332,7 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
   LOG_EVENT("MPFilterID", mampid_get(filter->MAMPid));
 
   if ( filter->MAMPid[0] == 0 ){
-    logmsg(stderr, "MPFilterID with invalid MAMPid (null)\n");
+    logmsg(stderr, "[control] MPFilterID with invalid MAMPid (null)\n");
     return;
   }
 
@@ -343,12 +343,12 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
 
   MYSQL_RES* result = mysql_store_result(&connection);
   if ( !send_mysql_filter(marc, result, from, filter->MAMPid) ){
-    logmsg(verbose, "No filter matching {%02d}\n", ntohl(filter->id));
+    logmsg(verbose, "[control] No filter matching {%02d}\n", ntohl(filter->id));
     MPMessage reply;
     reply.type = MP_FILTER_INVALID_ID;
     int ret;
     if ( (ret=marc_push_event(marc, &reply, from)) != 0 ){
-      logmsg(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+      logmsg(stderr, "[control] marc_push_event() returned %d: %s\n", ret, strerror(ret));
     }
   }
   mysql_free_result(result);
@@ -383,7 +383,7 @@ static void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
 
   printf("MP_VerifyFilter():\n%s\n",query);
   if ( mysql_query(&connection, query) != 0 ) {
-    logmsg(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(&connection), query);
+    logmsg(stderr, "[control] Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(&connection), query);
     return;
   }
 
@@ -391,7 +391,7 @@ static void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
 }
 
 static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr* from){
-  logmsg(stderr, "Distress signal from MP (MAMPid: %s)\n", mampid);
+  logmsg(stderr, "[control] Distress signal from MP (MAMPid: %s)\n", mampid);
   mp_set_status(mampid, MP_STATUS_DISTRESS);
 }
 
