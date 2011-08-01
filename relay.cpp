@@ -39,7 +39,19 @@
 #include <getopt.h>
 
 #include "relay.h"
+
+#ifndef BUILD_RELAY
 #include "database.h"
+#else
+/* if we're building the relay (and maybe only the relay) we don't want to
+ * depend on the mysql libraries, so the database header isn't included at all
+ * and there replacement variables is declared directly. */
+char db_hostname[64] = "localhost";
+int  db_port = 3306;
+char db_name[64] = {0,};
+char db_username[64] = {0,};
+char db_password[64] = {0,};
+#endif
 
 #include <libmarc/log.h>
 #include <errno.h>
@@ -176,12 +188,6 @@ int verbose_flag = 0;
 int debug_flag = 0;
 FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
 bool volatile keep_running = true;
-
-char db_hostname[64] = "localhost";
-int  db_port = 3306;
-char db_name[64] = {0,};
-char db_username[64] = {0,};
-char db_password[64] = {0,};
 
 static struct option long_options[]= {
   {"bcast",1,0,'b'},
