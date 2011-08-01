@@ -84,20 +84,7 @@ int Relay::init(){
   
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
-
-  /* Find appropriate broadcast address */
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  if ( iface ){
-    struct ifreq ifr;
-    strncpy(ifr.ifr_name, iface, IFNAMSIZ);
-    
-    if(ioctl(sd, SIOCGIFBRDADDR, &ifr) == -1 ) {
-      logmsg(stderr, "Could not get broadcast address for %s: %s", iface, strerror(errno));
-      return 1;
-    }
-
-    memcpy(&addr, &ifr.ifr_broadaddr, sizeof(ifr.ifr_broadaddr));
-  }
 
   /* bind local server port */
   addr.sin_port = htons(ma_relay_port);
