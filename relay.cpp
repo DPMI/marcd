@@ -3,7 +3,9 @@
                              -------------------
     begin                : Wed Oct 30 2002
     copyright            : (C) 2002 by Anders Ekberg
+                         : (C) 2011 by David Sveningsson
     email                : anders.ekberg@bth.se
+                         : david.sveningsson@{bth.se,sidvind.com}
  ***************************************************************************/
 
 /***************************************************************************
@@ -14,6 +16,10 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -32,9 +38,24 @@
 
 #include <getopt.h>
 
+#include "relay.h"
+#include "database.h"
+
+#include <libmarc/log.h>
+#include <errno.h>
+#include <poll.h>
+#include <sys/ioctl.h>
+
 #define MAX_MSG 1500
 
-struct MAINFO{
+extern FILE* verbose;
+extern const char* iface;
+extern int ma_control_port;
+extern int ma_relay_port;
+extern in_addr listen_addr;
+extern bool volatile keep_running;
+
+struct MAINFO {
   int version;
   char address[16];
   int port;
@@ -44,10 +65,117 @@ struct MAINFO{
   int portUDP;
 };
 
-int LOCAL_SERVER_PORT= 1500;
-int MYSQL_PORT = 3306;
-int MARC_PORT= 1600;
+Relay::Relay()
+  : sd(0) {
 
+}
+
+int Relay::init(){
+  /* socket creation */
+  sd = socket(AF_INET, SOCK_DGRAM, 0);
+  if ( sd < 0 ) {
+    logmsg(stderr, "cannot open socket (%d): %s\n", errno, strerror(errno));
+    return 1;
+  }
+
+  int on = 1;
+  setsockopt(sd,SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
+  setsockopt(sd,SOL_SOCKET, SO_BROADCAST, &on, sizeof(int));
+  
+  struct sockaddr_in addr;
+  addr.sin_family = AF_INET;
+
+  /* Find appropriate broadcast address */
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  if ( iface ){
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, iface, IFNAMSIZ);
+    
+    if(ioctl(sd, SIOCGIFBRDADDR, &ifr) == -1 ) {
+      logmsg(stderr, "Could not get broadcast address for %s: %s", iface, strerror(errno));
+      return 1;
+    }
+
+    memcpy(&addr, &ifr.ifr_broadaddr, sizeof(ifr.ifr_broadaddr));
+  }
+
+  /* bind local server port */
+  addr.sin_port = htons(ma_relay_port);
+  logmsg(stderr, "[ relay ] Listens to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+  if ( bind(sd, (struct sockaddr *)&addr, sizeof(addr)) < 0 ){
+    logmsg(stderr, "[ relay ] cannot bind port number %d\n", ma_relay_port);
+    return 1;
+  }
+
+  logmsg(verbose, "[ relay ] Relay info:\n");
+  logmsg(verbose, "[ relay ]   MArC: %s (%d/%d)\n", inet_ntoa(listen_addr), ma_relay_port, ma_control_port);
+  logmsg(verbose, "[ relay ]   Database: %s\n", db_name);
+  logmsg(verbose, "[ relay ]   User: %s\n", db_username);
+  logmsg(verbose, "[ relay ]   Password: %s\n", db_password);
+
+  return 0;
+}
+
+int Relay::cleanup(){
+  logmsg(stderr, "[ relay ] Thread finished.\n");
+  return 0;
+}
+
+int Relay::run(){
+  int counter = 0;
+  MAINFO msg, self;
+  struct sockaddr_in from;
+
+  self.version = 2;
+  strncpy(self.address, inet_ntoa(listen_addr), 16);
+  self.port = MYSQL_PORT;
+  strncpy(self.database, db_name, 64);
+  strncpy(self.user, db_username, 64);
+  strncpy(self.password, db_password, 64);
+  self.portUDP = ma_control_port;
+
+  /* file descriptors to watch */
+  struct pollfd fds[2] = {
+    {sd, POLLIN, 0},
+    {interupt_fd(), POLLIN, 0}
+  };
+  
+  int timeout = 10000; /* ms */
+
+  while ( keep_running ){
+    /* wait for anything to arrive */
+    poll(fds, 2, timeout);
+    if ( !(fds[0].revents & POLLIN) ) continue; /* no data */
+    if (   fds[1].revents & POLLIN  ) continue; /* interupted */
+
+    /* reset buffer */
+    memset(&msg, 0, sizeof(MAINFO));
+
+    /* receive message */
+    socklen_t addrlen = sizeof(struct sockaddr_in);
+    ssize_t bytes = recvfrom(sd, &msg, sizeof(MAINFO), 0, (struct sockaddr *)&from, &addrlen);
+    
+    if ( bytes < 0 ){
+      logmsg(stderr, "[ relay ] recvfrom() returned %d: %s\n", errno, strerror(errno));
+      break;
+    }
+
+    /* print received message */
+    counter++;
+    logmsg(stderr,  "[ relay ]  [%d]  MArC request from %s:%d.\n", counter, inet_ntoa(from.sin_addr), ntohs(from.sin_port));
+    logmsg(verbose, "[ relay ]          MP Listens to (UDP) %s:%d\n", msg.address, ntohs(msg.port));
+    logmsg(verbose, "[ relay ]          MArC: %s (%d/%d) database %s %s/%s\n", inet_ntoa(listen_addr), ma_relay_port, ma_control_port, db_name, db_username, strlen(db_password) > 0 ? db_password : "#NO#");
+
+    bytes = sendto(sd, &self, sizeof(struct MAINFO), 0, (struct sockaddr*)&from, sizeof(struct sockaddr_in));
+    if( bytes < 0 ) {
+      logmsg(stderr, "[ relay ] sendto() returned %d: %s\n", errno, strerror(errno));
+      break;
+    }
+  }
+  return 0;
+}
+
+#ifdef BUILD_RELAY
 int main(int argc, char *argv[]){
   register int op;
   int option_index;
@@ -66,7 +194,7 @@ int main(int argc, char *argv[]){
   
   int sd, n, cliLen, counter;
   struct sockaddr_in cliAddr, servAddr;
-  char msg[MAX_MSG];
+
   char *serv=(char*)malloc(17);
   struct MAINFO myInfo,*hisInfo;
   sprintf(myInfo.address,"192.168.0.159");
@@ -149,30 +277,10 @@ int main(int argc, char *argv[]){
     exit(1);
   }
 
-
-  /* socket creation */
-  sd=socket(AF_INET, SOCK_DGRAM, 0);
-  if(sd<0) {
-    printf("%s: cannot open socket \n",argv[0]);
-    exit(1);
-  }
-
-  setsockopt(sd,SOL_SOCKET,SO_REUSEADDR,(void*)1,sizeof(int));
-  setsockopt(sd,SOL_SOCKET,SO_BROADCAST,(void*)1,sizeof(int));
-  
-  /* bind local server port */
-  servAddr.sin_family = AF_INET;
-  inet_aton(serv,&servAddr.sin_addr);
-  servAddr.sin_port = htons(LOCAL_SERVER_PORT);
-
-  printf("Listens to %s:%d\n",inet_ntoa(servAddr.sin_addr),ntohs(servAddr.sin_port));
-  if( bind (sd, (struct sockaddr *) &servAddr,sizeof(servAddr))<0){
-    printf("%s: cannot bind port number %d \n",
-	   argv[0], LOCAL_SERVER_PORT);
-    exit(1);
-  }
-  printf("%s: Waiting for data on port UDP %u\n",argv[0],LOCAL_SERVER_PORT);
-  printf("This is the info:\n\tMArC: %s (%d/%d)\n\tDatabase: %s\n\tUser: %s\n\tPassword: %s\n",myInfo.address, myInfo.port, myInfo.portUDP, myInfo.database, myInfo.user, myInfo.password);
+  Relay relay;
+  relay.init();
+  relay.run();
+  relay.cleanup();
 
   counter=0;
   /* server infinite loop */
@@ -214,4 +322,4 @@ return 0;
 
 }
 
-
+#endif /* BUILD_RELAY */

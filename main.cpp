@@ -22,8 +22,10 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "control.h"
+#include "relay.h"
 #include "database.h"
 
+#include <libmarc/libmarc.h>
 #include <libmarc/version.h>
 #include <libmarc/log.h>
 
@@ -36,6 +38,8 @@
 #include <unistd.h>
 #include <pwd.h>
 #include <grp.h>
+#include <signal.h>
+#include <sys/ioctl.h>
 
 /* GLOBALS */
 static const char* program_name;
@@ -43,13 +47,18 @@ int ma_control_port = MA_CONTROL_DEFAULT_PORT;
 int ma_relay_port = MA_RELAY_DEFAULT_PORT;
 
 char* rrdpath;
+char* iface = NULL;
+in_addr listen_addr = { htonl(INADDR_ANY) };
 int verbose_flag = 0;
 int debug_flag = 0;
 FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
+bool volatile keep_running = true;
 
 static int drop_priv_flag = 1;
 static uid_t drop_uid = -1;
 static gid_t drop_gid = -1;
+static bool have_control_daemon = false;
+static bool have_relay_daemon = false;
 
 enum LongFlags {
   FLAG_DATADIR = 256,
@@ -60,6 +69,7 @@ enum LongFlags {
 static struct option long_options[]= {
   {"relay",      optional_argument, 0, 'r'},
   {"iface",      required_argument, 0, 'i'},
+  {"listen",     required_argument, 0, 'm'},
   {"datadir",    required_argument, 0, FLAG_DATADIR},
 
   /* database options */
@@ -91,6 +101,7 @@ void show_usage(){
   printf("  -r, --relay[=PORT]  In addition to running MArCd, setup relaying so a\n"
 	 "                      separate MArelayD isn't needed.\n"
 	 "  -i, --iface=IFACE   Only listen on IFACE.\n"
+	 "  -m, --listen=IP     Only listen on IP.\n"
 	 "      --datadir=PATH  Use PATH as rrdtool data storage. [default: \n"
 	 "                      " DATA_DIR "]\n"
 	 "\n"
@@ -118,45 +129,88 @@ void show_usage(){
 
 static int priviledge_drop(){
   if ( getuid() != 0 ){
-    logmsg(stderr, "Not executing as uid=0, cannot drop priviledges.\n");
+    logmsg(stderr, "[  main ] Not executing as uid=0, cannot drop priviledges.\n");
     return 0;
   }
 
-  logmsg(stderr, "Dropping priviledges to uid=%d gid=%d\n", drop_uid, drop_gid);
+  logmsg(stderr, "[  main ] Dropping priviledges to uid=%d gid=%d\n", drop_uid, drop_gid);
   if ( setgid(drop_gid) != 0 ){
-    logmsg(stderr, "setgid() failed: %s\n", strerror(errno));
+    logmsg(stderr, "[  main ] setgid() failed: %s\n", strerror(errno));
     return 1;
   }
   if ( setuid(drop_uid) != 0 ){
-    logmsg(stderr, "setuid() failed: %s\n", strerror(errno));
+    logmsg(stderr, "[  main ] setuid() failed: %s\n", strerror(errno));
     return 1;
   }
 
   return 0;
 }
 
+static void setup_output(){
+  /* force verbose if debug is enabled */
+  verbose_flag |= debug_flag;
+  
+  /* setup vfp to stdout or /dev/null depending on verbose flag */
+  verbose = verbose_flag ? stdout : fopen("/dev/null", "w");
+  
+  /* redirect output */
+  marc_set_output_handler(logmsg, vlogmsg, stderr, verbose);
+}
+
+static void default_env(){
+  rrdpath = strdup(DATA_DIR);
+  struct passwd* passwd = getpwnam("marc");
+  struct group* group = getgrnam("marc");
+  if ( passwd ){
+    drop_uid = passwd->pw_uid;
+  }
+  if ( group ){
+    drop_gid = group->gr_gid;
+  }
+  if ( strcmp(program_name, "MArelayD") == 0 ){
+    have_relay_daemon = true;
+  } else {
+    have_control_daemon = true;
+  }
+}
+
+static int check_env(){
+  if ( db_name[0] == 0 ){
+    fprintf(stderr, "[  main ] No database specified.\n");
+    return 0;
+  }
+  
+  if ( access(rrdpath, W_OK) != 0 ){
+    logmsg(stderr, "[  main ] Need write persmission to data dir: %s\n", rrdpath);
+    return 0;
+  }
+  return 1;
+}
+
+static void show_env(){
+  logmsg(stderr, "[  main ] Datadir: %s\n", rrdpath);
+}
+
+static void sigint(int signum){
+  putc('\r', stderr);
+  if ( keep_running ){
+    logmsg(stderr, "[  main ] Caught termination signal, stopping threads.\n");
+    keep_running = false;
+    Daemon::interupt_all();
+  } else {
+    logmsg(stderr, "[  main ] Caught termination signal again, aborting.\n");
+    exit(1);
+  }
+}
+
 int main(int argc, char *argv[]){
   printf("MArCd " VERSION " (libmarc-" LIBMARC_VERSION ")\n");
   program_name = strrchr(argv[0], '/') + 1;
 
+  default_env();
+
   extern int opterr, optopt;
   int ret;
-  
-  /* defaults */
-  rrdpath = strdup(DATA_DIR);
-  {
-    struct passwd* passwd = getpwnam("marc");
-    if ( passwd ){
-      drop_uid = passwd->pw_uid;
-    }
-  }
-  {
-    struct group* group = getgrnam("marc");
-    if ( group ){
-      drop_gid = group->gr_gid;
-    }
-  }
-
   int option_index = 0;
   int op;
 
@@ -199,6 +253,47 @@ int main(int argc, char *argv[]){
       }
       break;
 
+    case 'i': /* --iface */
+      {
+	/* check if iface exists */
+	struct ifreq ifr;
+	strncpy(ifr.ifr_name, optarg, IFNAMSIZ);
+	int sd = socket(AF_INET, SOCK_DGRAM, 0);
+	
+	if ( sd < 0 ){
+	  logmsg(stderr, "Failed to open socket: %s\n", strerror(errno));
+	  exit(1);
+	}
+
+	if( ioctl(sd, SIOCGIFINDEX, &ifr) == -1 ) {
+	  logmsg(stderr, "%s is not a valid interface: %s", optarg, strerror(errno));
+	  continue;
+	}
+
+	if( ioctl(sd, SIOCGIFADDR, &ifr) == -1 ) {
+	  logmsg(stderr, "Failed to get IP on interface %s: %s", optarg, strerror(errno));
+	  continue;
+	}
+	
+	iface = optarg;
+	listen_addr = ((sockaddr_in*)&ifr.ifr_addr)->sin_addr;
+      }
+      break;
+
+    case 'r': /* --relay */
+      have_relay_daemon = true;
+
+      if ( optarg ){
+	int tmp = atoi(optarg);
+	if ( tmp > 0 ){
+	  ma_relay_port = tmp;
+	} else {
+	  logmsg(stderr, "Invalid port given to --relay: %s. Ignored\n", optarg);
+	}
+      }
+
+      break;
+
     case FLAG_DATADIR:
       free(rrdpath);
       rrdpath = strdup(optarg);
@@ -216,39 +311,44 @@ int main(int argc, char *argv[]){
     db_name[sizeof(db_name)-1] = '\0';
   }
 
+  setup_output();
+
   /* sanity checks */
-  if ( db_name[0] == 0 ){
-    fprintf(stderr, "No database specified.\n");
+  if ( !check_env() ){
     return 1;
   }
+  show_env();
 
-  /* force verbose if debug is enabled */
-  verbose_flag |= debug_flag;
+  /* install signal handler */
+  signal(SIGINT, sigint);
 
-  /* setup vfp to stdout or /dev/null depending on verbose flag */
-  verbose = stdout;
-  if ( !verbose_flag ){
-    verbose = fopen("/dev/null", "w");
-  }
+  /* initialize daemons */
+  pthread_barrier_t barrier;
+  int threads = 1;
+  threads += (int)have_control_daemon;
+  threads += (int)have_relay_daemon;
+  pthread_barrier_init(&barrier, NULL, threads);
 
-  if ( access(rrdpath, W_OK) != 0 ){
-    logmsg(stderr, "Need write persmission to data dir: %s\n", rrdpath);
-    return 1;
-  }
-  logmsg(stderr, "Datadir: %s\n", rrdpath);
-
-  if ( (ret=ma_control_init()) != 0 ){
+  if ( have_control_daemon && (ret=Daemon::instantiate<Control>(200, &barrier)) != 0 ){
     logmsg(stderr, "Failed to initialize control daemon, terminating.\n");
     return ret;
   }
 
+  if ( have_relay_daemon && (ret=Daemon::instantiate<Relay>(200, &barrier)) != 0 ){
+    logmsg(stderr, "Failed to initialize relay daemon, terminating.\n");
+    return ret;
+  }
+
+  /* drop priviledges */
   if ( drop_priv_flag ){
     priviledge_drop();
   }
 
-  ma_control_run();
-  ma_control_cleanup();
+  /* release all threads and wait for them to finish*/
+  pthread_barrier_wait(&barrier);
+  Daemon::join_all();
 
+  /* cleanup */
   free(rrdpath);
 
   return 0;

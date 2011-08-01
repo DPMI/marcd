@@ -3,9 +3,10 @@
 #endif
 
 #define LOG_EVENT(x, mampid)							\
-  logmsg(verbose, x " from %s:%d (MAMPid: %s)\n", \
+  logmsg(verbose, "[control] " x " from %s:%d (MAMPid: %s)\n", \
   inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid)
 
+#include "control.h"
 #include "database.h"
 #include "utils.h"
 
@@ -16,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <signal.h>
 
 enum MPStatusEnum {
   MP_STATUS_NOT_AUTH,
@@ -28,6 +30,7 @@ enum MPStatusEnum {
 extern int verbose_flag;
 extern int debug_flag;
 extern FILE* verbose;
+extern bool volatile keep_running;
 
 extern int ma_control_port;
 static marc_context_t marc;
@@ -43,10 +46,7 @@ void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from);
 
 static int convMySQLtoFPI(struct filter* dst,  MYSQL_RES* src);
 
-int ma_control_init(){
-  /* redirect output */
-  marc_set_output_handler(logmsg, vlogmsg, stderr, verbose);
-
+int Control::init(){
   /* initialize mysql */
   mysql_init(&connection);
   if ( !db_connect() ){
@@ -56,22 +56,23 @@ int ma_control_init(){
   /* initialize libmarc */
   int ret;
   if ( (ret=marc_init_server(&marc, ma_control_port)) != 0 ){
-    logmsg(stderr, "marc_init_server() returned %d: %s\n", ret, strerror(ret));
+    logmsg(stderr, "[control] marc_init_server() returned %d: %s\n", ret, strerror(ret));
     return 1;
   }
 
   return 0;
 }
 
-int ma_control_cleanup(){
+int Control::cleanup(){
+  logmsg(stderr, "[control] Thread finished.\n");
   return 0;
 }
 
-int ma_control_run(){
+int Control::run(){
   int ret;
 
   /* wait for events */
-  while (1){
+  while ( keep_running ){
     MPMessage event;
     struct sockaddr from;
     struct timeval timeout = {1, 0}; /* 1 sec timeout */
@@ -85,12 +86,12 @@ int ma_control_run(){
       break;
       
     default:
-      logmsg(stderr, "marc_poll_event() returned %d: %s\n", ret, strerror(ret));
+      logmsg(stderr, "[control] marc_poll_event() returned %d: %s\n", ret, strerror(ret));
       return 1;
     }
 
     if ( debug_flag ){
-      logmsg(verbose, "Received event of type %d (%zd bytes)\n", event.type, bytes);
+      logmsg(verbose, "[control] Received event of type %d (%zd bytes)\n", event.type, bytes);
       hexdump(verbose, (const char*)&event, bytes);
     }
 
@@ -116,7 +117,7 @@ int ma_control_run(){
       break;
 
     default:
-      logmsg(stderr, "not handling message of type %d\n", event.type);
+      logmsg(stderr, "[control] not handling message of type %d\n", event.type);
     }
   }
 
@@ -181,7 +182,7 @@ static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sock
   mampid_set(MPfilter.MAMPid, MAMPid);
   marc_filter_pack(&filter, &MPfilter.filter);
   
-  logmsg(verbose, "Sending Filter {%d} to to MP %s.\n", filter.filter_id, mampid_get(MPfilter.MAMPid));
+  logmsg(verbose, "[control] Sending Filter {%d} to to MP %s.\n", filter.filter_id, mampid_get(MPfilter.MAMPid));
 
   if ( debug_flag ){
     hexdump(verbose, (char*)&MPfilter, sizeof(struct MPFilter));
@@ -189,7 +190,7 @@ static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sock
   
   int ret;
   if ( (ret=marc_push_event(marc, (MPMessage*)&MPfilter, dst)) != 0 ){
-    logmsg(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+    logmsg(stderr, "[control] marc_push_event() returned %d: %s\n", ret, strerror(ret));
     return 0;
   }
 
@@ -209,25 +210,25 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
   memcpy(&MPadr.sin_addr.s_addr, MPinit->ipaddress,sizeof(struct in_addr));
 
-  logmsg(verbose, "MPinitialization:\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
-  logmsg(verbose, "      .type= %d \n",MPinit->type);
-  logmsg(verbose, "      .mac = %s \n", hexdump_address(&MPinit->hwaddr));
-  logmsg(verbose, "      .name= %s \n",MPinit->hostname);
-  logmsg(verbose, "      .ipaddress = %s \n", inet_ntoa(MPadr.sin_addr));
-  logmsg(verbose, "      .port = %d \n", ntohs(MPinit->port));
-  logmsg(verbose, "      .maxFilters = %d \n",ntohs(MPinit->maxFilters));
-  logmsg(verbose, "      .noCI = %d \n", ntohs(MPinit->noCI));
-  logmsg(verbose, "      .MAMPid = %s \n", mampid_get(MPinit->MAMPid));
+  logmsg(verbose, "[control] MPinitialization:\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
+  logmsg(verbose, "[control]      .type= %d \n",MPinit->type);
+  logmsg(verbose, "[control]      .mac = %s \n", hexdump_address(&MPinit->hwaddr));
+  logmsg(verbose, "[control]      .name= %s \n",MPinit->hostname);
+  logmsg(verbose, "[control]      .ipaddress = %s \n", inet_ntoa(MPadr.sin_addr));
+  logmsg(verbose, "[control]      .port = %d \n", ntohs(MPinit->port));
+  logmsg(verbose, "[control]      .maxFilters = %d \n",ntohs(MPinit->maxFilters));
+  logmsg(verbose, "[control]      .noCI = %d \n", ntohs(MPinit->noCI));
+  logmsg(verbose, "[control]      .MAMPid = %s \n", mampid_get(MPinit->MAMPid));
 
   if ( ntohs(MPinit->version.protocol.major) > 0 || ntohs(MPinit->version.protocol.minor) >= 7 ){
-    logmsg(verbose, "      .version.protocol = %d.%d\n", ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor));
-    logmsg(verbose, "      .version.caputils = %d.%d.%d\n", MPinit->version.caputils.major, MPinit->version.caputils.minor , MPinit->version.caputils.micro);
-    logmsg(verbose, "      .version.libmarc  = %d.%d.%d\n", MPinit->version.libmarc.major, MPinit->version.libmarc.minor , MPinit->version.libmarc.micro);
-    logmsg(verbose, "      .version.mp       = %d.%d.%d\n", MPinit->version.self.major, MPinit->version.self.minor , MPinit->version.self.micro);
-    logmsg(verbose, "      .drivers          = %d\n", ntohl(MPinit->drivers));
+    logmsg(verbose, "[control]       .version.protocol = %d.%d\n", ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor));
+    logmsg(verbose, "[control]       .version.caputils = %d.%d.%d\n", MPinit->version.caputils.major, MPinit->version.caputils.minor , MPinit->version.caputils.micro);
+    logmsg(verbose, "[control]       .version.libmarc  = %d.%d.%d\n", MPinit->version.libmarc.major, MPinit->version.libmarc.minor , MPinit->version.libmarc.micro);
+    logmsg(verbose, "[control]       .version.mp       = %d.%d.%d\n", MPinit->version.self.major, MPinit->version.self.minor , MPinit->version.self.micro);
+    logmsg(verbose, "[control]       .drivers          = %d\n", ntohl(MPinit->drivers));
 
     for ( int i = 0; i < ntohs(MPinit->noCI); i++ ){
-      logmsg(verbose, "      .CI[%d].iface      = %.8s\n", i, MPinit->CI[i].iface);
+      logmsg(verbose, "[control]       .CI[%d].iface      = %.8s\n", i, MPinit->CI[i].iface);
     }
   }
   
@@ -239,7 +240,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   
   MYSQL_RES* result = mysql_store_result(&connection);
   if(mysql_num_rows(result)==0){ /* We are a new MP..  */
-    logmsg(verbose, "This is an unregisterd MP.\n");
+    logmsg(verbose, "[control] This is an unregisterd MP.\n");
     mysql_free_result(result);
 
     if ( !db_query("INSERT INTO measurementpoints SET name='%s',ip='%s',port='%d',mac='%s',maxFilters=%d,noCI=%d"
@@ -257,23 +258,23 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
     mysql_free_result(result);
   }
 
-  logmsg(verbose, "MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
+  logmsg(verbose, "[control] MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
   mampid_set(MPauth.MAMPid, MAMPid);
 
   if ( debug_flag ){
-    logmsg(verbose, "Sending authorization reply.\n");
+    logmsg(verbose, "[control] Sending authorization reply.\n");
     hexdump(verbose, (const char*)&MPauth, sizeof(struct MPauth));
   }
 
   /* Send authorize message (telling whenever it is authorized or not) */
   if ( (ret=marc_push_event(marc, (MPMessage*)&MPauth, from)) != 0 ){
-    logmsg(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+    logmsg(stderr, "[control] marc_push_event() returned %d: %s\n", ret, strerror(ret));
     return;
   }
 
   if( strlen(MAMPid) == 0){ // The MP exists, but isnt authorized.
     if ( !verbose_flag ){
-      logmsg(stderr, "MPinitialization request from %s:%d -> not authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
+      logmsg(stderr, "[control] MPinitialization request from %s:%d -> not authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
     } else {
       logmsg(verbose, "This MP exists but is not yet authorized.\n");
     }
