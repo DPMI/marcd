@@ -160,8 +160,8 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
   rule->caplen=atoi(row[23]);
 
   const char* destination = row[21];
-  enum DestinationType type = (enum DestinationType)atoi(row[22]);
-  destination_aton(&rule->dest, destination, type, 0);
+  enum AddressType type = (enum AddressType)atoi(row[22]);
+  stream_addr_aton(&rule->dest, destination, type, 0);
 
   return 1;
 }
@@ -378,7 +378,7 @@ static void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
 	    f->caplen,
 	    f->consumer);
       
-    sprintf(query, "%s, DESTADDR='%s' ", query, destination_ntoa(&f->dest));
+    sprintf(query, "%s, DESTADDR='%s' ", query, stream_addr_ntoa(&f->dest));
   }
 
   printf("MP_VerifyFilter():\n%s\n",query);
