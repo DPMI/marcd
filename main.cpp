@@ -207,7 +207,14 @@ static void sigint(int signum){
 
 int main(int argc, char *argv[]){
   printf("MArCd " VERSION " (libmarc-" LIBMARC_VERSION ")\n");
-  program_name = strrchr(argv[0], '/') + 1;
+  
+  /* extract program name from path. e.g. /path/to/MArCd -> MArCd */
+  const char* separator = strrchr(argv[0], '/');
+  if ( separator ){
+    program_name = separator + 1;
+  } else {
+    program_name = argv[0];
+  }
 
   default_env();
 
