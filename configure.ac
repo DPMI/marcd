@@ -11,6 +11,7 @@ AC_PROG_CXX
 AC_PROG_RANLIB
 AC_GNU_SOURCE
 PKG_PROG_PKG_CONFIG
+AC_SEARCH_LIBS([clock_gettime], [rt])
 
 AC_ARG_WITH([daemon], [AS_HELP_STRING([--with-daemon], [Build MArCd @<:@default=enabled@:>@])])
 AC_ARG_WITH([relay],  [AS_HELP_STRING([--with-relay],  [Build MArelayD @<:@default=enabled@:>@])])
