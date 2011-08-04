@@ -302,7 +302,7 @@ int main(int argc, char *argv[]){
       break;
 
     default:
-      fprintf(stderr, "?? getopt returned character code 0%o ??\n", op);
+      fprintf(stderr, "unhandled option '%c'.\n", op);
       abort();
     }
   }
