@@ -2,8 +2,9 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
-#include "libmarc/libmarc.h"
-#include "libmarc/log.h"
+#include <libmarc/libmarc.h>
+#include <caputils/log.h>
+#define logmsg(fd, ...) logmsg(fd, "STATUS", __VA_ARGS__)
 
 #ifdef HAVE_RRDTOOL
 #include <rrd.h>

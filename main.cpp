@@ -27,11 +27,13 @@
 
 #include <libmarc/libmarc.h>
 #include <libmarc/version.h>
-#include <libmarc/log.h>
+#include <caputils/log.h>
+#define MAIN "main"
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cstdarg>
 #include <getopt.h>
 #include <errno.h>
 
@@ -130,21 +132,33 @@ void show_usage(){
 
 static int priviledge_drop(){
   if ( getuid() != 0 ){
-    logmsg(stderr, "[  main ] Not executing as uid=0, cannot drop priviledges.\n");
+    logmsg(stderr, MAIN, "Not executing as uid=0, cannot drop priviledges.\n");
     return 0;
   }
 
-  logmsg(stderr, "[  main ] Dropping priviledges to uid=%d gid=%d\n", drop_uid, drop_gid);
+  logmsg(stderr, MAIN, "[  main ] Dropping priviledges to uid=%d gid=%d\n", drop_uid, drop_gid);
   if ( setgid(drop_gid) != 0 ){
-    logmsg(stderr, "[  main ] setgid() failed: %s\n", strerror(errno));
+    logmsg(stderr, MAIN, "[  main ] setgid() failed: %s\n", strerror(errno));
     return 1;
   }
   if ( setuid(drop_uid) != 0 ){
-    logmsg(stderr, "[  main ] setuid() failed: %s\n", strerror(errno));
+    logmsg(stderr, MAIN, "[  main ] setuid() failed: %s\n", strerror(errno));
     return 1;
   }
 
   return 0;
+}
+
+int logmsg_wrapper(FILE* fd, const char* fmt, ...){
+  va_list ap;
+  va_start(ap, fmt);
+  int ret = vlogmsg(fd, "MArCd", fmt, ap);
+  va_end(ap);
+  return ret;
+}
+
+int vlogmsg_wrapper(FILE* fd, const char* fmt, va_list ap){
+  return vlogmsg(fd, "MArCd", fmt, ap);
 }
 
 static void setup_output(){
@@ -155,7 +169,7 @@ static void setup_output(){
   verbose = verbose_flag ? stdout : fopen("/dev/null", "w");
   
   /* redirect output */
-  marc_set_output_handler(logmsg, vlogmsg, stderr, verbose);
+  marc_set_output_handler(logmsg_wrapper, vlogmsg_wrapper, stderr, verbose);
 }
 
 static void default_env(){
@@ -178,29 +192,29 @@ static void default_env(){
 
 static int check_env(){
   if ( db_name[0] == 0 ){
-    fprintf(stderr, "[  main ] No database specified.\n");
+    logmsg(stderr, MAIN, "No database specified.\n");
     return 0;
   }
   
   if ( access(rrdpath, W_OK) != 0 ){
-    logmsg(stderr, "[  main ] Need write persmission to data dir: %s\n", rrdpath);
+    logmsg(stderr, MAIN, "Need write persmission to data dir: %s\n", rrdpath);
     return 0;
   }
   return 1;
 }
 
 static void show_env(){
-  logmsg(stderr, "[  main ] Datadir: %s\n", rrdpath);
+  logmsg(stderr, MAIN, "Datadir: %s\n", rrdpath);
 }
 
 static void sigint(int signum){
   putc('\r', stderr);
   if ( keep_running ){
-    logmsg(stderr, "[  main ] Caught termination signal, stopping threads.\n");
+    logmsg(stderr, MAIN, "Caught termination signal, stopping threads.\n");
     keep_running = false;
     Daemon::interupt_all();
   } else {
-    logmsg(stderr, "[  main ] Caught termination signal again, aborting.\n");
+    logmsg(stderr, MAIN, "Caught termination signal again, aborting.\n");
     exit(1);
   }
 }
@@ -340,12 +354,12 @@ int main(int argc, char *argv[]){
   control_addr.s_addr = listen_addr.s_addr;
   
   if ( have_control_daemon && (ret=Daemon::instantiate<Control>(200, &barrier)) != 0 ){
-    logmsg(stderr, "Failed to initialize control daemon, terminating.\n");
+    logmsg(stderr, MAIN, "Failed to initialize control daemon, terminating.\n");
     return ret;
   }
 
   if ( have_relay_daemon && (ret=Daemon::instantiate<Relay>(200, &barrier)) != 0 ){
-    logmsg(stderr, "Failed to initialize relay daemon, terminating.\n");
+    logmsg(stderr, MAIN, "Failed to initialize relay daemon, terminating.\n");
     return ret;
   }
 

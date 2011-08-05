@@ -53,7 +53,9 @@ char db_username[64] = {0,};
 char db_password[64] = {0,};
 #endif
 
-#include <libmarc/log.h>
+#include <caputils/log.h>
+#define logmsg(fd, ...) logmsg(fd, "relay", __VA_ARGS__)
+
 #include <errno.h>
 #include <poll.h>
 #include <sys/ioctl.h>
@@ -102,18 +104,18 @@ int Relay::init(){
 
   /* bind local server port */
   addr.sin_port = htons(ma_relay_port);
-  logmsg(stderr, "[ relay ] Listens to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+  logmsg(stderr, "Listens to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
   if ( bind(sd, (struct sockaddr *)&addr, sizeof(addr)) < 0 ){
-    logmsg(stderr, "[ relay ] cannot bind port number %d\n", ma_relay_port);
+    logmsg(stderr, "cannot bind port number %d\n", ma_relay_port);
     return 1;
   }
 
-  logmsg(verbose, "[ relay ] Relay info:\n");
-  logmsg(verbose, "[ relay ]   MArC: %s:%d\n", inet_ntoa(control_addr), ma_control_port);
+  logmsg(verbose, "Relay info:\n");
+  logmsg(verbose, "  MArC: %s:%d\n", inet_ntoa(control_addr), ma_control_port);
   if ( db_name[0] == 0 ){
-    logmsg(verbose, "[ relay ]   Database: unset\n");
+    logmsg(verbose, "  Database: unset\n");
   } else {
-    logmsg(verbose, "[ relay ]   Database: mysql://%s%s%s:%d/%s (using password: %s)\n",
+    logmsg(verbose, "  Database: mysql://%s%s%s:%d/%s (using password: %s)\n",
 	   db_username, db_username[0] ? "@" : "", db_hostname, db_port, db_name, db_password[0] != 0 ? "YES" : "NO");
   }
 
@@ -121,7 +123,7 @@ int Relay::init(){
 }
 
 int Relay::cleanup(){
-  logmsg(stderr, "[ relay ] Thread finished.\n");
+  logmsg(stderr, "Thread finished.\n");
   return 0;
 }
 
@@ -159,19 +161,19 @@ int Relay::run(){
     ssize_t bytes = recvfrom(sd, &msg, sizeof(MAINFO), 0, (struct sockaddr *)&from, &addrlen);
     
     if ( bytes < 0 ){
-      logmsg(stderr, "[ relay ] recvfrom() returned %d: %s\n", errno, strerror(errno));
+      logmsg(stderr, "recvfrom() returned %d: %s\n", errno, strerror(errno));
       break;
     }
 
     /* print received message */
     counter++;
-    logmsg(stderr,  "[ relay ]  [%d]  MArC request from %s:%d.\n", counter, inet_ntoa(from.sin_addr), ntohs(from.sin_port));
-    logmsg(verbose, "[ relay ]          MP Listens to (UDP) %s:%d\n", msg.address, ntohs(msg.port));
-    logmsg(verbose, "[ relay ]          MArC: %s (%d/%d) database %s %s/%s\n", inet_ntoa(listen_addr), ma_relay_port, ma_control_port, db_name, db_username, strlen(db_password) > 0 ? db_password : "#NO#");
+    logmsg(stderr,  " [%d]  MArC request from %s:%d.\n", counter, inet_ntoa(from.sin_addr), ntohs(from.sin_port));
+    logmsg(verbose, "         MP Listens to (UDP) %s:%d\n", msg.address, ntohs(msg.port));
+    logmsg(verbose, "         MArC: %s (%d/%d) database %s %s/%s\n", inet_ntoa(listen_addr), ma_relay_port, ma_control_port, db_name, db_username, strlen(db_password) > 0 ? db_password : "#NO#");
 
     bytes = sendto(sd, &self, sizeof(struct MAINFO), 0, (struct sockaddr*)&from, sizeof(struct sockaddr_in));
     if( bytes < 0 ) {
-      logmsg(stderr, "[ relay ] sendto() returned %d: %s\n", errno, strerror(errno));
+      logmsg(stderr, "sendto() returned %d: %s\n", errno, strerror(errno));
       break;
     }
   }

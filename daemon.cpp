@@ -3,7 +3,8 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "daemon.h"
-#include <libmarc/log.h>
+#include <caputils/log.h>
+#define logmsg(fd, ...) logmsg(fd, "main", __VA_ARGS__)
 
 #include <cstdio>
 #include <cstdlib>
