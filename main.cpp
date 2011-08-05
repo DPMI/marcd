@@ -342,9 +342,6 @@ int main(int argc, char *argv[]){
   }
   show_env();
 
-  /* install signal handler */
-  signal(SIGINT, sigint);
-
   /* initialize daemons */
   pthread_barrier_t barrier;
   int threads = 1;
@@ -368,8 +365,12 @@ int main(int argc, char *argv[]){
     priviledge_drop();
   }
 
+  /* install signal handler */
+  signal(SIGINT, sigint);
+
   /* release all threads and wait for them to finish*/
   pthread_barrier_wait(&barrier);
+  logmsg(stderr, MAIN, "Threads started. Going to sleep. Abort with SIGINT\n");
   Daemon::join_all();
 
   /* cleanup */

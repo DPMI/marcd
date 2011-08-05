@@ -28,12 +28,12 @@ struct sync {
 };
 
 int Daemon::instantiate_real(Daemon* daemon, unsigned int timeout, pthread_barrier_t* barrier){
-  struct sync td;
   int ret;
-  td.daemon = daemon;
-  td.value = 0;
-  sem_init(&td.semaphore, 0, 0);
-  td.barrier = barrier;
+  struct sync* td = (struct sync*)malloc(sizeof(struct sync)); /* free'd by thread entry */
+  td->daemon = daemon;
+  td->value = 0;
+  sem_init(&td->semaphore, 0, 0); /* free'd by thread entry */
+  td->barrier = barrier;
 
   timespec ts;
   if ( clock_gettime(CLOCK_REALTIME, &ts) != 0 ){
@@ -49,13 +49,13 @@ int Daemon::instantiate_real(Daemon* daemon, unsigned int timeout, pthread_barri
     ts.tv_nsec -= 1000000000;
   }
 
-  if ( (ret=pthread_create(&daemon->thread, NULL, entry, &td)) != 0 ) {
+  if ( (ret=pthread_create(&daemon->thread, NULL, entry, td)) != 0 ) {
     fprintf(stderr,"pthread_create() returned %d: %s\n", ret, strerror(ret));
     return ret;
   }
 
     /* wait for thread initialization */
-  if ( sem_timedwait(&td.semaphore, &ts) != 0 ){
+  if ( sem_timedwait(&td->semaphore, &ts) != 0 ){
     int saved = errno;
     switch ( saved ){
     case ETIMEDOUT:
@@ -75,14 +75,10 @@ int Daemon::instantiate_real(Daemon* daemon, unsigned int timeout, pthread_barri
     return saved;
   }
 
-  /* destroy semaphore */
-  sem_destroy(&td.semaphore);
-
   daemons.push_back(daemon);
 
   /* finished */
-  return td.value;
-
+  return td->value;
 }
 
 void* Daemon::entry(void* data){
@@ -115,6 +111,10 @@ void* Daemon::entry(void* data){
   /* close pipe */
   close(daemon->pipe[0]);
   close(daemon->pipe[1]);
+
+  /* free resources */
+  sem_destroy(&td->semaphore);
+  free(td);
 
   return 0;
 }
