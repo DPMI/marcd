@@ -373,10 +373,10 @@ static void MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
 	    hexdump_address_r(&f->eth_src, &buf[0]), hexdump_address_r(&f->eth_src_mask, &buf[17]),
 	    hexdump_address_r(&f->eth_dst, &buf[34]), hexdump_address_r(&f->eth_dst_mask, &buf[51]),
 	    f->ip_proto,
-	    inet_ntoa_r(f->ip_src, &buf[ 68]), inet_ntoa_r(f->ip_src_mask, &buf[ 85]),
-	    inet_ntoa_r(f->ip_dst, &buf[102]), inet_ntoa_r(f->ip_dst_mask, &buf[119]),
+	    f->ip_src, f->ip_src_mask,
+	    f->ip_dst, f->ip_dst_mask,
 	    f->src_port,f->src_port_mask,f->dst_port,f->dst_port_mask,
-	    f->dest.type, 
+	    stream_addr_type(&f->dest), 
 	    f->caplen,
 	    f->consumer);
       
