@@ -284,17 +284,17 @@ int main(int argc, char *argv[]){
 	int sd = socket(AF_INET, SOCK_DGRAM, 0);
 	
 	if ( sd < 0 ){
-	  logmsg(stderr, "Failed to open socket: %s\n", strerror(errno));
+	  logmsg(stderr, MAIN, "Failed to open socket: %s\n", strerror(errno));
 	  exit(1);
 	}
 
 	if( ioctl(sd, SIOCGIFINDEX, &ifr) == -1 ) {
-	  logmsg(stderr, "%s is not a valid interface: %s", optarg, strerror(errno));
+	  logmsg(stderr, MAIN, "%s is not a valid interface: %s", optarg, strerror(errno));
 	  continue;
 	}
 
 	if( ioctl(sd, SIOCGIFADDR, &ifr) == -1 ) {
-	  logmsg(stderr, "Failed to get IP on interface %s: %s", optarg, strerror(errno));
+	  logmsg(stderr, MAIN, "Failed to get IP on interface %s: %s", optarg, strerror(errno));
 	  continue;
 	}
 	
@@ -311,7 +311,7 @@ int main(int argc, char *argv[]){
 	if ( tmp > 0 ){
 	  ma_relay_port = tmp;
 	} else {
-	  logmsg(stderr, "Invalid port given to --relay: %s. Ignored\n", optarg);
+	  logmsg(stderr, MAIN, "Invalid port given to --relay: %s. Ignored\n", optarg);
 	}
       }
 

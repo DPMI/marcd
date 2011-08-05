@@ -212,7 +212,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
   memcpy(&MPadr.sin_addr.s_addr, MPinit->ipaddress,sizeof(struct in_addr));
 
-  logmsg(verbose, "MPinitialization:\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
+  logmsg(verbose, "MPinitialization from %s:%d:\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
   logmsg(verbose, "     .type= %d \n",MPinit->type);
   logmsg(verbose, "     .mac = %s \n", hexdump_address(&MPinit->hwaddr));
   logmsg(verbose, "     .name= %s \n",MPinit->hostname);
