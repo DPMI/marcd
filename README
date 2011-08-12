@@ -1,6 +1,41 @@
-MArCd
+Measurement Area Control Daemon
+===============================
 
 This listens to MP queries and responds with the MA-Controller information.
 
+Building
+--------
+
+1. mkdir build
+2. ../configure [--prefix /path/to/prefix]
+3. make && make install
+
+By default it uses the iniparser library to read configuration files, but it can
+be disabled with `--without-iniparser'. It also supports extended statistics
+with rrdtool but can be disabled using `--without-rrdtool`. If you only intend
+to only build either MArCd or MArelayD use the flags `--without-daemon` and
+`--without-relay`.
+
+Mysql support is required when building control daemon.
+
+See `configure --help` for more help.
+
+Install and setup
+-----------------
+
 1. Create a user/group to run MArCd, by default marc/marc is used.
 2. Put the group in the webgui config as well.
+3. Make $datadir writable by this group.
+4. Edit $sysconf/marcd.conf (see $sysconf/marcd.conf.dist)
+5. See `MArCd --help` and MArCd(1) for more help.
+
+Measurement Area Relay
+======================
+
+The relay is used by MPs to find a MArCd in the local subnet without explicit
+configuration, by broadcasting a UDP packet and receiving information where
+the control daemon is located.
+
+It can either be run standalone with MArelayD or integrated in MArCd. The former
+is useful to have multiple subnets with a single MArCd and the later is useful
+if there is only one subnet.
