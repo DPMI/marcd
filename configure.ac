@@ -14,8 +14,8 @@ PKG_PROG_PKG_CONFIG
 AC_SEARCH_LIBS([clock_gettime], [rt])
 AX_INIPARSER
 
-AC_ARG_WITH([daemon], [AS_HELP_STRING([--with-daemon], [Build MArCd @<:@default=enabled@:>@])])
-AC_ARG_WITH([relay],  [AS_HELP_STRING([--with-relay],  [Build MArelayD @<:@default=enabled@:>@])])
+AC_ARG_ENABLE([daemon], [AS_HELP_STRING([--enable-daemon], [Build MArCd @<:@default=enabled@:>@])])
+AC_ARG_ENABLE([relay],  [AS_HELP_STRING([--enable-relay],  [Build MArelayD @<:@default=enabled@:>@])])
 
 pkgdatadir="${localstatedir}/lib/marc"
 AC_SUBST(pkgdatadir)
@@ -27,8 +27,8 @@ AS_IF([test "x$with_daemon" != "xno"], [
 	AX_RRDTOOL
 	PKG_CHECK_MODULES([libmarc], [libmarc >= 0.7.1])
 ])
-AM_CONDITIONAL(BUILD_DAEMON, [test "x$with_daemon" != "xno"])
-AM_CONDITIONAL(BUILD_RELAY,  [test "x$with_relay" != "xno"])
+AM_CONDITIONAL(BUILD_DAEMON, [test "x$enable_daemon" != "xno"])
+AM_CONDITIONAL(BUILD_RELAY,  [test "x$enable_relay" != "xno"])
 
 
 AC_DEFINE([MA_CONTROL_DEFAULT_PORT], [1600], [Which port MArCd should listen on])

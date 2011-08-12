@@ -13,8 +13,8 @@ Building
 By default it uses the iniparser library to read configuration files, but it can
 be disabled with `--without-iniparser'. It also supports extended statistics
 with rrdtool but can be disabled using `--without-rrdtool`. If you only intend
-to only build either MArCd or MArelayD use the flags `--without-daemon` and
-`--without-relay`.
+to only build either MArCd or MArelayD use the flags `--disable-daemon` and
+`--disable-relay`.
 
 Mysql support is required when building control daemon.
 
