@@ -458,12 +458,12 @@ int main(int argc, char *argv[]){
   pthread_barrier_init(&barrier, NULL, threads);
   control_addr.s_addr = listen_addr.s_addr;
   
-  if ( have_control_daemon && (ret=Daemon::instantiate<Control>(200, &barrier)) != 0 ){
+  if ( have_control_daemon && (ret=Daemon::instantiate<Control>(2000, &barrier)) != 0 ){
     logmsg(stderr, MAIN, "Failed to initialize control daemon, terminating.\n");
     return ret;
   }
 
-  if ( have_relay_daemon && (ret=Daemon::instantiate<Relay>(200, &barrier)) != 0 ){
+  if ( have_relay_daemon && (ret=Daemon::instantiate<Relay>(2000, &barrier)) != 0 ){
     logmsg(stderr, MAIN, "Failed to initialize relay daemon, terminating.\n");
     return ret;
   }
