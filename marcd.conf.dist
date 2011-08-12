@@ -1,0 +1,10 @@
+[mysql]
+username = marc          ; mysql username
+password = konko         ; mysql password
+database = marc          ; mysql database
+
+[security]
+user = marc              ; drop priviledges to this user
+
+[general]
+relay = true             ; also run a relay

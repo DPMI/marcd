@@ -43,6 +43,11 @@
 #include <signal.h>
 #include <sys/ioctl.h>
 
+#ifdef HAVE_INIPARSER_H
+#include <iniparser.h>
+#define MARCD_DEFAULT_CONFIG_FILE "marcd.conf"
+#endif
+
 /* GLOBALS */
 static const char* program_name;
 int ma_control_port = MA_CONTROL_DEFAULT_PORT;
@@ -88,6 +93,7 @@ static struct option long_options[]= {
   {"group",      required_argument, 0, FLAG_GROUP},
     
   /* other */
+  {"config",    required_argument, 0, 'f'},
   {"verbose",   no_argument, &verbose_flag, 1},
   {"quiet",     no_argument, &verbose_flag, 0},
   {"debug",     no_argument, &debug_flag, 1},
@@ -122,6 +128,9 @@ void show_usage(){
 	 "      --group GROUP   Change GID to this group. [default: marc]\n"
 	 "\n"
 	 "Other\n"
+#ifdef HAVE_INIPARSER_H
+	 "  -f, --config=PATH   Load configuration from PATH [default: " MARCD_DEFAULT_CONFIG_FILE "]\n"
+#endif
 	 "      --verbose       Verbose output.\n"
 	 "      --quiet         Inverse of --verbose.\n"
 	 "      --debug         Show extra debugging output, including hexdump of\n"
@@ -219,6 +228,93 @@ static void sigint(int signum){
   }
 }
 
+#ifdef HAVE_INIPARSER_H
+int load_config(int argc, char* argv[]){
+  const char* filename = NULL;
+  dictionary* config = NULL;
+
+  /* locate configuration filename. This is done before getopt since getopt has
+   * precedence over conf, so if this is run after getopt it would overwrite
+   * getopt instead of vice-versa. */
+  for ( int i = 0; i < argc; i++ ){
+    int a = strcmp(argv[i], "-f") == 0;
+    int b = strcmp(argv[i], "--config") == 0;
+    if ( !(a||b) ){
+      continue;
+    }
+
+    if ( i+1 == argc ){
+      fprintf(stderr, "%s: missing argument to %s.\n", program_name, argv[i]);
+      return 1;
+    }
+
+    filename = argv[i+1];
+  }
+
+  /* if no configuration file was explicitly required try default paths */
+  if ( !filename ){
+    /* try in sysconfdir ($prefix/etc by default) */
+    char* tmp;
+    asprintf(&tmp, "%s/%s", SYSCONF_DIR, MARCD_DEFAULT_CONFIG_FILE);
+    if ( access(tmp, R_OK) == 0 ){
+      char* mem = (char*)alloca(strlen(tmp)+1); /* allocate on stack */
+      strcpy(mem, tmp);
+      free(tmp);
+      filename = mem;
+    }
+
+    /* try default filename in pwd (has precedence of sysconfdir) */
+    if ( access(MARCD_DEFAULT_CONFIG_FILE, R_OK) == 0 ){
+      filename = MARCD_DEFAULT_CONFIG_FILE;
+    }
+  }
+
+  /* if we still don't have a filename we ignore it, the user hasn't requested
+   * anything and no default could be located. */
+  if ( !filename ){
+    return 0;
+  }
+
+  logmsg(stderr, MAIN, "Loading configuration from \"%s\".\n", filename);
+
+  /* parse configuration */
+  if ( !(config=iniparser_load(filename)) ){
+    return 1;
+  }
+
+  const char* value = NULL;
+
+  /* mysql hostname */
+  if ( (value=iniparser_getstring(config, "mysql:hostname", NULL)) ){
+    strncpy(db_hostname, value, sizeof(db_hostname));
+    db_hostname[sizeof(db_hostname)-1] = '\0';
+  }
+
+  /* mysql username */
+  if ( (value=iniparser_getstring(config, "mysql:username", NULL)) ){
+    strncpy(db_username, value, sizeof(db_username));
+    db_username[sizeof(db_username)-1] = '\0';
+  }
+
+  /* mysql password */
+  if ( (value=iniparser_getstring(config, "mysql:password", NULL)) ){
+    strncpy(db_password, value, sizeof(db_password));
+    db_password[sizeof(db_password)-1] = '\0';
+  }
+
+  /* mysql database */
+  if ( (value=iniparser_getstring(config, "mysql:database", NULL)) ){
+    strncpy(db_name, value, sizeof(db_name));
+    db_name[sizeof(db_name)-1] = '\0';
+  }
+
+  /* relay */
+  have_relay_daemon = iniparser_getboolean(config, "general:relay", 0);
+
+  return 0;
+}
+#endif /* HAVE_INIPARSER_H */
+
 int main(int argc, char *argv[]){
   printf("MArCd " VERSION " (libmarc-" LIBMARC_VERSION ")\n");
   
@@ -237,9 +333,15 @@ int main(int argc, char *argv[]){
   int option_index = 0;
   int op;
 
+#ifdef HAVE_INIPARSER_H
+  if ( load_config(argc, argv) != 0 ){ /* passing argv so it can read -f/--config */
+    return 1; /* error already shown */
+  }
+#endif
+
   opterr=0;
   optopt=0;
-  while ( (op = getopt_long(argc, argv, "r::i:h:u:p:", long_options, &option_index)) != -1 ){
+  while ( (op = getopt_long(argc, argv, "r::i:h:u:p:f:", long_options, &option_index)) != -1 ){
     switch (op){
     case 0: /* long opt */
       break;
@@ -247,6 +349,12 @@ int main(int argc, char *argv[]){
     case 'v':
       show_usage();
       exit(0);
+      break;
+
+    case 'f':
+#ifndef HAVE_INIPARSER_H
+      fprintf(stderr, "%s: configuration files not supported (build with --with-iniparser)\n", program_name);
+#endif
       break;
 
     case 'h':
