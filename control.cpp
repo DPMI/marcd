@@ -27,6 +27,7 @@ enum MPStatusEnum {
   MP_STATUS_CAPTURE,
   MP_STATUS_STOPPED,
   MP_STATUS_DISTRESS,
+  MP_STATUS_TERMINATED,
 };
 
 extern int verbose_flag;
@@ -113,6 +114,11 @@ int Control::run(){
     case MP_FILTER_REQUEST_EVENT:
       MP_GetFilter(marc, &event.filter_id, &from);
       break;
+
+    case MP_CONTROL_TERMINATE_EVENT:
+	    logmsg(verbose, "MP %s has terminated properly.\n", mampid_get(event.MAMPid));
+	    mp_set_status(mampid_get(event.MAMPid), MP_STATUS_TERMINATED);
+	    break;
 
     case MP_CONTROL_DISTRESS:
       MP_Distress(marc, mampid_get(event.MAMPid), &from);
