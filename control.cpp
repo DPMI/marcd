@@ -223,14 +223,14 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   logmsg(verbose, "     .MAMPid = %s \n", mampid_get(MPinit->MAMPid));
 
   if ( ntohs(MPinit->version.protocol.major) > 0 || ntohs(MPinit->version.protocol.minor) >= 7 ){
-    logmsg(verbose, "      .version.protocol = %d.%d\n", ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor));
-    logmsg(verbose, "      .version.caputils = %d.%d.%d\n", MPinit->version.caputils.major, MPinit->version.caputils.minor , MPinit->version.caputils.micro);
-    logmsg(verbose, "      .version.libmarc  = %d.%d.%d\n", MPinit->version.libmarc.major, MPinit->version.libmarc.minor , MPinit->version.libmarc.micro);
-    logmsg(verbose, "      .version.mp       = %d.%d.%d\n", MPinit->version.self.major, MPinit->version.self.minor , MPinit->version.self.micro);
-    logmsg(verbose, "      .drivers          = %d\n", ntohl(MPinit->drivers));
+    logmsg(verbose, "     .version.protocol = %d.%d\n", ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor));
+    logmsg(verbose, "     .version.caputils = %d.%d.%d\n", MPinit->version.caputils.major, MPinit->version.caputils.minor , MPinit->version.caputils.micro);
+    logmsg(verbose, "     .version.libmarc  = %d.%d.%d\n", MPinit->version.libmarc.major, MPinit->version.libmarc.minor , MPinit->version.libmarc.micro);
+    logmsg(verbose, "     .version.mp       = %d.%d.%d\n", MPinit->version.self.major, MPinit->version.self.minor , MPinit->version.self.micro);
+    logmsg(verbose, "     .drivers          = %d\n", ntohl(MPinit->drivers));
 
     for ( int i = 0; i < ntohs(MPinit->noCI); i++ ){
-      logmsg(verbose, "      .CI[%d].iface      = %.8s\n", i, MPinit->CI[i].iface);
+      logmsg(verbose, "     .CI[%d].iface      = %.8s\n", i, MPinit->CI[i].iface);
     }
   }
   
