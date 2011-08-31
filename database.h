@@ -5,7 +5,7 @@
 #include <errmsg.h> /* from mysql */
 
 int db_connect();
-int db_query(const char* sql, ...);
+int db_query(const char* sql, ...) __attribute__ ((format (printf, 1, 2)));
 
 extern MYSQL connection;
 extern char db_hostname[64];
