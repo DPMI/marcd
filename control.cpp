@@ -245,7 +245,15 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
     logmsg(verbose, "This is an unregisterd MP.\n");
     mysql_free_result(result);
 
-    if ( !db_query("INSERT INTO measurementpoints SET name='%s',ip='%s',port='%d',mac='%s',maxFilters=%d,noCI=%d"
+    if ( !db_query("INSERT INTO\n"
+                   "  measurementpoints\n"
+                   "SET\n"
+                   " 	name='%s',\n"
+                   " 	ip='%s',\n"
+                   " 	port='%d',\n"
+                   " 	mac='%s',\n"
+                   " 	maxFilters=%d,\n"
+                   " 	noCI=%d\n"
 	    ,MPinit->hostname
 	    ,inet_ntoa(MPadr.sin_addr)
 	    ,ntohs(MPinit->port)
