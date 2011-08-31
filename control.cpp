@@ -248,24 +248,57 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
     if ( !db_query("INSERT INTO\n"
                    "  measurementpoints\n"
                    "SET\n"
-                   " 	name='%s',\n"
-                   " 	ip='%s',\n"
-                   " 	port='%d',\n"
-                   " 	mac='%s',\n"
-                   " 	maxFilters=%d,\n"
-                   " 	noCI=%d\n"
-	    ,MPinit->hostname
-	    ,inet_ntoa(MPadr.sin_addr)
-	    ,ntohs(MPinit->port)
-	    ,hexdump_address(&MPinit->hwaddr)
-	    ,ntohs(MPinit->maxFilters)
-	    ,ntohs(MPinit->noCI)) ){
-      return;
+                   "  name='%s',\n"
+                   "  ip='%s',\n"
+                   "  port='%d',\n"
+                   "  mac='%s',\n"
+                   "  maxFilters=%d,\n"
+                   "  noCI=%d\n"
+                   , MPinit->hostname
+                   , inet_ntoa(MPadr.sin_addr)
+                   , ntohs(MPinit->port)
+                   , hexdump_address(&MPinit->hwaddr)
+                   , ntohs(MPinit->maxFilters)
+                   , ntohs(MPinit->noCI)) ){
+	    return;
     }
   } else { /* known MP */
     MYSQL_ROW row = mysql_fetch_row(result);
     strncpy(MAMPid, row[0], 16);
     mysql_free_result(result);
+  }
+
+	/* update fields every time the mp initializes (0.7 feature) */
+  if ( ntohs(MPinit->version.protocol.major) > 0 || ntohs(MPinit->version.protocol.minor) >= 7 ){
+	  char version[256];
+	  char iface[256];
+	  snprintf(version, 256, "protocol-%d.%d;caputils-%d.%d.%d;libmarc-%d.%d.%d;mp-%d.%d.%d",
+	           ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor),
+	           MPinit->version.caputils.major, MPinit->version.caputils.minor , MPinit->version.caputils.micro,
+	           MPinit->version.libmarc.major, MPinit->version.libmarc.minor , MPinit->version.libmarc.micro,
+	           MPinit->version.self.major, MPinit->version.self.minor , MPinit->version.self.micro);
+	  
+	  
+	  int offset = 0;
+	  for ( int i = 0; i < ntohs(MPinit->noCI); i++ ){
+		  offset += snprintf(iface+offset, 256-offset, "%s;", MPinit->CI[i].iface);
+	  }
+	  iface[offset-1] = '\0'; /* remove trailing ; */
+
+	  db_query("UPDATE\n"
+	           "  measurementpoints\n"
+	           "SET\n"
+	           "  ip='%s',\n"
+	           "  port='%d',\n"
+	           "  maxFilters=%d,\n"
+	           "  drivers=%d,\n"
+	           "  version='%s',\n"
+	           "  CI_iface='%s'\n"
+	           , inet_ntoa(MPadr.sin_addr)
+	           , ntohs(MPinit->port)
+	           , ntohs(MPinit->maxFilters)
+	           , ntohl(MPinit->drivers),
+	           version, iface);
   }
 
   logmsg(verbose, "MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
