@@ -138,6 +138,7 @@ int Relay::run(){
   strncpy(self.database, db_name, 64);
   strncpy(self.user, db_username, 64);
   strncpy(self.password, db_password, 64);
+  self.port = db_port;
   self.portUDP = ma_control_port;
 
   /* file descriptors to watch */
