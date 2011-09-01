@@ -70,6 +70,7 @@ extern int ma_relay_port;
 extern in_addr listen_addr;
 extern in_addr control_addr;
 extern bool volatile keep_running;
+extern int debug_flag;
 
 struct MAINFO {
   uint32_t version;
@@ -172,6 +173,10 @@ int Relay::run(){
     logmsg(stderr,  " [%d]  MArC request from %s:%d.\n", counter, inet_ntoa(from.sin_addr), ntohs(from.sin_port));
     logmsg(verbose, "         MP Listens to (UDP) %s:%d\n", msg.address, ntohs(msg.port));
     logmsg(verbose, "         MArC: %s (%d/%d) database %s %s/%s\n", inet_ntoa(listen_addr), ma_relay_port, ma_control_port, db_name, db_username, strlen(db_password) > 0 ? db_password : "#NO#");
+
+    if ( debug_flag ){
+	    hexdump(stderr, (const char*)&self, sizeof(struct MAINFO));
+    }
 
     bytes = sendto(sd, &self, sizeof(struct MAINFO), 0, (struct sockaddr*)&from, sizeof(struct sockaddr_in));
     if( bytes < 0 ) {
