@@ -132,6 +132,7 @@ int Relay::run(){
   MAINFO msg, self;
   struct sockaddr_in from;
 
+  memset(&self, 0, sizeof(MAINFO));
   self.version = 2;
   strncpy(self.address, inet_ntoa(control_addr), 16);
   strncpy(self.database, db_name, 64);
