@@ -1,4 +1,5 @@
 marcd-0.7.3
 -----------
 
+* [relay] 64bit compability.
 * [relay] better compability with legacy MPs.

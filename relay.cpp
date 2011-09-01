@@ -72,14 +72,14 @@ extern in_addr control_addr;
 extern bool volatile keep_running;
 
 struct MAINFO {
-  int version;
+  uint32_t version;
   char address[16];
-  int port;
+  uint32_t port;
   char database[64];
   char user[64];
   char password[64];
-  int portUDP;
-};
+  uint32_t portUDP;
+} __attribute__((packed));
 
 Relay::Relay()
   : sd(0) {
