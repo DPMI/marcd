@@ -2,7 +2,7 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
-#include <libmarc/libmarc.h>
+#include <caputils/marc.h>
 #include <caputils/log.h>
 #define logmsg(fd, ...) logmsg(fd, "STATUS", __VA_ARGS__)
 

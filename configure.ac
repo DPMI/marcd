@@ -1,4 +1,4 @@
-AC_INIT([MArCd],[0.7.3], [dsv@bth.se])
+AC_INIT([MArCd],[0.7.4], [dsv@bth.se])
 
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([-Wall 1.11 foreign])
@@ -25,7 +25,8 @@ AX_DEFINE_DIR([SYSCONF_DIR], [sysconfdir], [installation directory for read-only
 AS_IF([test "x$with_daemon" != "xno"], [
 	MYSQL_CLIENT
 	AX_RRDTOOL
-	PKG_CHECK_MODULES([libmarc], [libmarc-0.7 >= 0.7.1])
+	PKG_CHECK_MODULES([libcap_filter], [libcap_filter-0.7 >= 0.7.4])
+	PKG_CHECK_MODULES([libcap_marc], [libcap_marc-0.7 >= 0.7.4])
 ])
 AM_CONDITIONAL(BUILD_DAEMON, [test "x$enable_daemon" != "xno"])
 AM_CONDITIONAL(BUILD_RELAY,  [test "x$enable_relay" != "xno"])

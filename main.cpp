@@ -25,9 +25,9 @@
 #include "relay.h"
 #include "database.h"
 
-#include <libmarc/libmarc.h>
-#include <libmarc/version.h>
+#include <caputils/marc.h>
 #include <caputils/log.h>
+#include <caputils/version.h>
 #define MAIN "main"
 
 #include <cstdio>
@@ -255,7 +255,12 @@ int load_config(int argc, char* argv[]){
   if ( !filename ){
     /* try in sysconfdir ($prefix/etc by default) */
     char* tmp;
-    asprintf(&tmp, "%s/%s", SYSCONF_DIR, MARCD_DEFAULT_CONFIG_FILE);
+    int ret = asprintf(&tmp, "%s/%s", SYSCONF_DIR, MARCD_DEFAULT_CONFIG_FILE);
+    if ( ret == -1 ){
+	    fprintf(stderr, "%s: %s\n", program_name, strerror(errno));
+	    exit(1);
+    }
+
     if ( access(tmp, R_OK) == 0 ){
       char* mem = (char*)alloca(strlen(tmp)+1); /* allocate on stack */
       strcpy(mem, tmp);
@@ -265,7 +270,7 @@ int load_config(int argc, char* argv[]){
 
     /* try default filename in pwd (has precedence of sysconfdir) */
     if ( access(MARCD_DEFAULT_CONFIG_FILE, R_OK) == 0 ){
-      filename = MARCD_DEFAULT_CONFIG_FILE;
+	    filename = MARCD_DEFAULT_CONFIG_FILE;
     }
   }
 
@@ -316,7 +321,7 @@ int load_config(int argc, char* argv[]){
 #endif /* HAVE_INIPARSER_H */
 
 int main(int argc, char *argv[]){
-  printf("MArCd " VERSION " (libmarc-" LIBMARC_VERSION ")\n");
+  printf("MArCd " VERSION " (caputils-" CAPUTILS_VERSION ")\n");
   
   /* extract program name from path. e.g. /path/to/MArCd -> MArCd */
   const char* separator = strrchr(argv[0], '/');

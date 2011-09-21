@@ -10,10 +10,10 @@
 #include "database.h"
 #include "utils.h"
 
-#include <libmarc/libmarc.h>
-#include <libmarc/version.h>
+#include <caputils/marc.h>
 #include <caputils/log.h>
 #include <caputils/utils.h>
+#include <caputils/version.h>
 #define logmsg(fd, ...) logmsg(fd, "MArCd", __VA_ARGS__)
 
 #include <stdlib.h>
@@ -188,7 +188,7 @@ static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sock
   
   MPfilter.type = MP_FILTER_EVENT;
   mampid_set(MPfilter.MAMPid, MAMPid);
-  marc_filter_pack(&filter, &MPfilter.filter);
+  filter_pack(&filter, &MPfilter.filter);
   
   logmsg(verbose, "Sending Filter {%d} to to MP %s.\n", filter.filter_id, mampid_get(MPfilter.MAMPid));
 
@@ -213,8 +213,8 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
   MPauth.type = MP_CONTROL_AUTHORIZE_EVENT;
   mampid_set(MPauth.MAMPid, 0);
-  MPauth.version.major = htons(LIBMARC_VERSION_MAJOR);
-  MPauth.version.minor = htons(LIBMARC_VERSION_MINOR);
+  MPauth.version.major = htons(CAPUTILS_VERSION_MAJOR);
+  MPauth.version.minor = htons(CAPUTILS_VERSION_MINOR);
 
   memcpy(&MPadr.sin_addr.s_addr, MPinit->ipaddress,sizeof(struct in_addr));
 
@@ -231,7 +231,6 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   if ( ntohs(MPinit->version.protocol.major) > 0 || ntohs(MPinit->version.protocol.minor) >= 7 ){
     logmsg(verbose, "     .version.protocol = %d.%d\n", ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor));
     logmsg(verbose, "     .version.caputils = %d.%d.%d\n", MPinit->version.caputils.major, MPinit->version.caputils.minor , MPinit->version.caputils.micro);
-    logmsg(verbose, "     .version.libmarc  = %d.%d.%d\n", MPinit->version.libmarc.major, MPinit->version.libmarc.minor , MPinit->version.libmarc.micro);
     logmsg(verbose, "     .version.mp       = %d.%d.%d\n", MPinit->version.self.major, MPinit->version.self.minor , MPinit->version.self.micro);
     logmsg(verbose, "     .drivers          = %d\n", ntohl(MPinit->drivers));
 
@@ -278,10 +277,9 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   if ( ntohs(MPinit->version.protocol.major) > 0 || ntohs(MPinit->version.protocol.minor) >= 7 ){
 	  char version[256];
 	  char iface[256];
-	  snprintf(version, 256, "protocol-%d.%d;caputils-%d.%d.%d;libmarc-%d.%d.%d;mp-%d.%d.%d",
+	  snprintf(version, 256, "protocol-%d.%d;caputils-%d.%d.%d;mp-%d.%d.%d",
 	           ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor),
 	           MPinit->version.caputils.major, MPinit->version.caputils.minor , MPinit->version.caputils.micro,
-	           MPinit->version.libmarc.major, MPinit->version.libmarc.minor , MPinit->version.libmarc.micro,
 	           MPinit->version.self.major, MPinit->version.self.minor , MPinit->version.self.micro);
 	  
 	  
