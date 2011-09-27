@@ -1,7 +1,7 @@
-AC_INIT([MArCd],[0.7.4], [dsv@bth.se])
+AC_INIT([MArCd],[0.7.5], [dsv@bth.se])
 
 AC_CONFIG_AUX_DIR([build-aux])
-AM_INIT_AUTOMAKE([-Wall 1.11 foreign])
+AM_INIT_AUTOMAKE([-Wall 1.11 foreign check-news])
 AM_SILENT_RULES([yes])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([config.h])
@@ -13,6 +13,7 @@ AC_GNU_SOURCE
 PKG_PROG_PKG_CONFIG
 AC_SEARCH_LIBS([clock_gettime], [rt])
 AX_INIPARSER
+AC_ARG_PROGRAM
 
 AC_ARG_ENABLE([daemon], [AS_HELP_STRING([--enable-daemon], [Build MArCd @<:@default=enabled@:>@])])
 AC_ARG_ENABLE([relay],  [AS_HELP_STRING([--enable-relay],  [Build MArelayD @<:@default=enabled@:>@])])
