@@ -18,7 +18,7 @@ AC_ARG_PROGRAM
 AC_ARG_ENABLE([daemon], [AS_HELP_STRING([--enable-daemon], [Build MArCd @<:@default=enabled@:>@])])
 AC_ARG_ENABLE([relay],  [AS_HELP_STRING([--enable-relay],  [Build MArelayD @<:@default=enabled@:>@])])
 
-pkgdatadir="${localstatedir}/lib/marc"
+pkgdatadir="${localstatedir}/marc"
 AC_SUBST(pkgdatadir)
 AX_DEFINE_DIR([DATA_DIR], [pkgdatadir], [Directory where datafiles are stored])
 AX_DEFINE_DIR([SYSCONF_DIR], [sysconfdir], [installation directory for read-only signle-machine data])
