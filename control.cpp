@@ -298,11 +298,14 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 	           "  drivers=%d,\n"
 	           "  version='%s',\n"
 	           "  CI_iface='%s'\n"
+	           "WHERE\n"
+	           "  mampid='%s'"
 	           , inet_ntoa(MPadr.sin_addr)
 	           , ntohs(MPinit->port)
 	           , ntohs(MPinit->maxFilters)
 	           , ntohl(MPinit->drivers),
-	           version, iface);
+	           version, iface,
+	           MAMPid);
   }
 
   logmsg(verbose, "MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
@@ -418,8 +421,8 @@ static void __attribute__((unused)) MP_VerifyFilter(int sd, struct sockaddr from
 	    hexdump_address_r(&f->eth_src, &buf[0]), hexdump_address_r(&f->eth_src_mask, &buf[17]),
 	    hexdump_address_r(&f->eth_dst, &buf[34]), hexdump_address_r(&f->eth_dst_mask, &buf[51]),
 	    f->ip_proto,
-	    f->_ip_src, f->_ip_src_mask,
-	    f->_ip_dst, f->_ip_dst_mask,
+	    f->ip_src, f->ip_src_mask,
+	    f->ip_dst, f->ip_dst_mask,
 	    f->src_port,f->src_port_mask,f->dst_port,f->dst_port_mask,
 	    stream_addr_type(&f->dest), 
 	    f->caplen,
