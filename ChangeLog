@@ -1,0 +1,5 @@
+marcd-0.7.6
+-----------
+
+	* [fix] linkage against libcap_filter.
+	* [fix] (re)allow user to set listen port.
