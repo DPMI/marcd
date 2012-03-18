@@ -72,6 +72,7 @@ enum LongFlags {
   FLAG_DATADIR = 256,
   FLAG_USER,
   FLAG_GROUP,
+  FLAG_SYSLOG,
 };
 
 static struct option long_options[]= {
@@ -79,19 +80,20 @@ static struct option long_options[]= {
   {"iface",      required_argument, 0, 'i'},
   {"listen",     required_argument, 0, 'm'},
   {"datadir",    required_argument, 0, FLAG_DATADIR},
+  {"syslog",     no_argument,       0, FLAG_SYSLOG},
 
   /* database options */
   {"dbhost",     required_argument, 0, 'h'},
   {"database",   required_argument, 0, 'd'},
   {"dbusername", required_argument, 0, 'u'},
   {"dbpassword", required_argument, 0, 'p'},
-    
+
   /* priviledge dropping */
   {"drop",       no_argument, &drop_priv_flag, 1},
   {"no-drop",    no_argument, &drop_priv_flag, 0},
   {"user",       required_argument, 0, FLAG_USER},
   {"group",      required_argument, 0, FLAG_GROUP},
-    
+
   /* other */
   {"config",    required_argument, 0, 'f'},
   {"verbose",   no_argument, &verbose_flag, 1},
@@ -113,6 +115,7 @@ void show_usage(){
 	 "  -m, --listen=IP     Only listen on IP.\n"
 	 "      --datadir=PATH  Use PATH as rrdtool data storage. [default: \n"
 	 "                      " DATA_DIR "]\n"
+	 "      --syslog        Write output to syslog instead of stderr.\n"
 	 "\n"
 	 "Database options\n"
 	 "  -h, --dbhost        MySQL database host. [Default: localhost]\n"
@@ -173,10 +176,10 @@ int vlogmsg_wrapper(FILE* fd, const char* fmt, va_list ap){
 static void setup_output(){
   /* force verbose if debug is enabled */
   verbose_flag |= debug_flag;
-  
+
   /* setup vfp to stdout or /dev/null depending on verbose flag */
   verbose = verbose_flag ? stdout : fopen("/dev/null", "w");
-  
+
   /* redirect output */
   marc_set_output_handler(logmsg_wrapper, vlogmsg_wrapper, stderr, verbose);
 }
@@ -204,7 +207,7 @@ static int check_env(){
     logmsg(stderr, MAIN, "No database specified.\n");
     return 0;
   }
-  
+
   if ( access(rrdpath, W_OK) != 0 ){
     logmsg(stderr, MAIN, "Need write persmission to data dir: %s\n", rrdpath);
     return 0;
@@ -322,7 +325,7 @@ int load_config(int argc, char* argv[]){
 
 int main(int argc, char *argv[]){
   printf("MArCd " VERSION " (caputils-" CAPUTILS_VERSION ")\n");
-  
+
   /* extract program name from path. e.g. /path/to/MArCd -> MArCd */
   const char* separator = strrchr(argv[0], '/');
   if ( separator ){
@@ -395,7 +398,7 @@ int main(int argc, char *argv[]){
 	struct ifreq ifr;
 	strncpy(ifr.ifr_name, optarg, IFNAMSIZ);
 	int sd = socket(AF_INET, SOCK_DGRAM, 0);
-	
+
 	if ( sd < 0 ){
 	  logmsg(stderr, MAIN, "Failed to open socket: %s\n", strerror(errno));
 	  exit(1);
@@ -410,7 +413,7 @@ int main(int argc, char *argv[]){
 	  logmsg(stderr, MAIN, "Failed to get IP on interface %s: %s", optarg, strerror(errno));
 	  continue;
 	}
-	
+
 	iface = optarg;
 	listen_addr = ((sockaddr_in*)&ifr.ifr_addr)->sin_addr;
       }
@@ -462,7 +465,7 @@ int main(int argc, char *argv[]){
   threads += (int)have_relay_daemon;
   pthread_barrier_init(&barrier, NULL, threads);
   control_addr.s_addr = listen_addr.s_addr;
-  
+
   if ( have_control_daemon && (ret=Daemon::instantiate<Control>(2000, &barrier)) != 0 ){
     logmsg(stderr, MAIN, "Failed to initialize control daemon, terminating.\n");
     return ret;

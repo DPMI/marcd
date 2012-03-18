@@ -32,6 +32,11 @@ AS_IF([test "x$with_daemon" != "xno"], [
 AM_CONDITIONAL(BUILD_DAEMON, [test "x$enable_daemon" != "xno"])
 AM_CONDITIONAL(BUILD_RELAY,  [test "x$enable_relay" != "xno"])
 
+AC_ARG_WITH([syslog], [AS_HELP_STRING([--with-syslog], [Build support for syslog @<:@default=enabled@:>@])])
+AS_IF([test "x$with_syslog" != "xno"], [
+  AC_CHECK_FUNCS([syslog])
+  AS_IF([test "x$ac_cv_func_syslog" != "xyes"], [AC_MSG_ERROR([syslog support requested but syslog function not found. Either ensure syslog is available or use --without-syslog to disable.])])
+])
 
 AC_DEFINE([MA_CONTROL_DEFAULT_PORT], [1600], [Which port MArCd should listen on])
 AC_DEFINE([MA_RELAY_DEFAULT_PORT], [1500], [Which port MArelayD should listen on])
