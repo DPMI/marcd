@@ -4,10 +4,10 @@
 #include "daemon.h"
 
 class Control: public Daemon {
-public:
-  virtual int init();
-  virtual int cleanup();
-  virtual int run();
+  public:
+	virtual int init();
+	virtual int cleanup();
+	virtual int run();
 };
 
 #endif /* MARCD_CONTROL_H */
