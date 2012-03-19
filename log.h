@@ -19,7 +19,7 @@ namespace Log {
 	void set_file_destination(FILE* fp, Severity severity);
 
 	#ifdef HAVE_SYSLOG
-	void set_syslog_destinatin(Severity severity);
+	void set_syslog_destination(Severity severity);
 	#endif
 };
 

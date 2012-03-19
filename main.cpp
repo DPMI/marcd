@@ -185,7 +185,7 @@ static void setup_output(){
   marc_set_output_handler(logmsg_wrapper, vlogmsg_wrapper, stderr, verbose);
 
   /* initialize log */
-  Log::set_file_destination(fopen("foo.log","w"), Log::VERBOSE);
+  Log::set_syslog_destination(Log::VERBOSE);
   Log::fatal("main", "fatal\n");
   Log::message("main", "message\n");
   Log::verbose("main", "verbose\n");
