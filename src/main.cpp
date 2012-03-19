@@ -199,7 +199,7 @@ static void setup_output(){
 	} else {
 		Log::set_syslog_destination(severity);
 	}
-	Log::message(MAIN, "%s-"VERSION" starting.", program_name);
+	Log::message(MAIN, "%s-"VERSION" starting.\n", program_name);
 }
 
 static void default_env(){
