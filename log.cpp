@@ -6,7 +6,7 @@
 #include <caputils/log.h>
 #include <cstdio>
 #include <cstdlib>
-#include <stdarg.h>
+#include <cstdarg>
 
 #ifdef HAVE_SYSLOG
 #include <sys/types.h>
@@ -15,17 +15,22 @@
 #endif
 
 typedef void (*log_callback)(const char* component, Log::Severity severity, const char* fmt, va_list ap);
-static log_callback log = NULL;
 static Log::Severity severity = Log::NORMAL;
+
+namespace Log {
+	log_callback log = NULL;
+}
 
 static FILE* fp = NULL;;
 static void file_log(const char* component, Log::Severity severity, const char* fmt, va_list ap){
 	vlogmsg(fp, component, fmt, ap);
 }
 
+static char name[64];
 static void syslog_log(const char* component, Log::Severity severity, const char* fmt, va_list ap){
 	static int level_lut[] = {
 		LOG_CRIT,
+		LOG_ERR,
 		LOG_NOTICE,
 		LOG_INFO,
 		LOG_DEBUG,
@@ -37,8 +42,24 @@ static void syslog_log(const char* component, Log::Severity severity, const char
 void Log::fatal(const char* component, const char* fmt, ...){
 	if ( severity < Log::FATAL ) return;
 	va_list ap;
+	va_list ap2;
 	va_start(ap, fmt);
+	va_copy(ap2, ap);
 	log(component, Log::FATAL, fmt, ap);
+
+	/* always log fatal to stderr */
+	//fp = stderr;
+	//file_log(component, Log::FATAL, fmt, ap2);
+
+	va_end(ap);
+	va_end(ap2);
+}
+
+void Log::error(const char* component, const char* fmt, ...){
+	if ( severity < Log::ERROR ) return;
+	va_list ap;
+	va_start(ap, fmt);
+	log(component, Log::ERROR, fmt, ap);
 	va_end(ap);
 }
 
@@ -79,7 +100,6 @@ void Log::set_file_destination(FILE* dst, Severity s){
 
 #ifdef HAVE_SYSLOG
 void Log::set_syslog_destination(Severity s){
-	char name[64];
 	pid_t pid = getpid();
 	snprintf(name, 64, "marcd[%d]", pid);
 	openlog(name, 0, LOG_DAEMON);

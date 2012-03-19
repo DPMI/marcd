@@ -2,9 +2,9 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
+#include "log.h"
 #include <caputils/marc.h>
 #include <caputils/log.h>
-#define logmsg(fd, ...) logmsg(fd, "STATUS", __VA_ARGS__)
 
 #ifdef HAVE_RRDTOOL
 #include <rrd.h>
@@ -13,7 +13,6 @@
 #include <cassert>
 
 extern char* rrdpath;
-extern FILE* verbose;
 
 #ifdef HAVE_RRDTOOL
 static void update(char* b1, char* b2, const char* when, const char* MAMPid, int CI, long packets, long matched){
@@ -50,17 +49,18 @@ static void update(char* b1, char* b2, const char* when, const char* MAMPid, int
   snprintf(b2, 1024, "%s:%s:%s", when, v1, v2);
 
   unsigned int argc = 4;
-  logmsg(verbose, "[control]    Executing \"rrdtool");
+  char buffer[1024];
+  char* dst = buffer;
+  dst += sprintf(dst, "    Executing \"rrdtool");
   for ( unsigned int i = 0; i < argc; i++ ){
-    /* using fprintf to continue line */
-    fprintf(verbose, " %s", argv[i]);
+    dst += sprintf(dst, " %s", argv[i]);
   }
-  fprintf(verbose, "\n");
+  Log::verbose("status", "%s\n", buffer);
 
   rrd_clear_error();
   if ( rrd_update(argc, argv) < 0 ){
-    logmsg(stderr, "[control]    rrd_update() failed: %s\n", rrd_get_error());
-  }  
+	  Log::fatal("status", "    rrd_update() failed: %s\n", rrd_get_error());
+  }
 }
 #endif /* HAVE_RRDTOOL */
 
@@ -69,10 +69,10 @@ void MP_Status2_reset(const char* MAMPid, int noCI){
   char b1[1024];
   char b2[1024];
 
-  logmsg(verbose, "[control] Resetting RRD counters for %s\n", MAMPid);
+  Log::verbose("status", "Resetting RRD counters for %s\n", MAMPid);
   update(b1, b2, "-1", MAMPid, -1, -1, -1);
   update(b1, b2, "N", MAMPid, -1, 0, 0);
-  
+
   for ( int i=0; i < noCI; i++ ){
       update(b1, b2, "-1", MAMPid, i, -1, -1);
       update(b1, b2, "N", MAMPid, i, 0, 0);
@@ -86,7 +86,7 @@ void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from){
 
   const char* mampid = mampid_get(MPstat->MAMPid);
 
-  logmsg(verbose, "[control] Extended status from %s:%d (MAMPid: %s)\n",
+  Log::verbose("status", "Extended status from %s:%d (MAMPid: %s)\n",
 	 inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid);
 
 #ifdef HAVE_RRDTOOL

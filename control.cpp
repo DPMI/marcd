@@ -3,18 +3,18 @@
 #endif
 
 #define LOG_EVENT(x, mampid)							\
-  logmsg(verbose, x " from %s:%d (MAMPid: %s)\n", \
+	Log::verbose("control", x " from %s:%d (MAMPid: %s)\n", \
   inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid)
 
 #include "control.h"
 #include "database.h"
 #include "utils.h"
+#include "log.h"
 
 #include <caputils/marc.h>
 #include <caputils/log.h>
 #include <caputils/utils.h>
 #include <caputils/version.h>
-#define logmsg(fd, ...) logmsg(fd, "MArCd", __VA_ARGS__)
 
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +32,6 @@ enum MPStatusEnum {
 
 extern int verbose_flag;
 extern int debug_flag;
-extern FILE* verbose;
 extern bool volatile keep_running;
 
 extern int ma_control_port;
@@ -59,7 +58,7 @@ int Control::init(){
   /* initialize libmarc */
   int ret;
   if ( (ret=marc_init_server(&marc, ma_control_port)) != 0 ){
-    logmsg(stderr, "marc_init_server() returned %d: %s\n", ret, strerror(ret));
+    Log::fatal("MArCd", "marc_init_server() returned %d: %s\n", ret, strerror(ret));
     return 1;
   }
 
@@ -67,7 +66,7 @@ int Control::init(){
 }
 
 int Control::cleanup(){
-  logmsg(stderr, "Thread finished.\n");
+  Log::fatal("MArCd", "Thread finished.\n");
   return 0;
 }
 
@@ -84,25 +83,26 @@ int Control::run(){
     case EAGAIN: /* delivered if using a timeout */
     case EINTR:  /* interuped */
       continue;
-      
+
     case 0:
       break;
-      
+
     default:
-      logmsg(stderr, "marc_poll_event() returned %d: %s\n", ret, strerror(ret));
+      Log::fatal("MArCd", "marc_poll_event() returned %d: %s\n", ret, strerror(ret));
       return 1;
     }
 
     if ( debug_flag ){
-      logmsg(verbose, "Received event of type %d (%zd bytes)\n", event.type, bytes);
-      hexdump(verbose, (const char*)&event, bytes);
+      char* repr = hexdump_str((const char*)&event, bytes);
+      Log::debug("MArCd", "Received event of type %d (%zd bytes):\n%s", event.type, bytes, repr);
+      free(repr);
     }
 
     switch ( event.type ){
     case MP_CONTROL_INIT_EVENT:
       MP_Init(marc, &event.init, &from);
       break;
-    
+
     case MP_STATUS_EVENT:
       MP_Status(marc, &event.status, &from);
       break;
@@ -116,7 +116,7 @@ int Control::run(){
       break;
 
     case MP_CONTROL_TERMINATE_EVENT:
-	    logmsg(verbose, "MP %s has terminated properly.\n", mampid_get(event.MAMPid));
+	    Log::verbose("MArCd", "MP %s has terminated properly.\n", mampid_get(event.MAMPid));
 	    mp_set_status(mampid_get(event.MAMPid), MP_STATUS_TERMINATED);
 	    break;
 
@@ -125,7 +125,7 @@ int Control::run(){
       break;
 
     default:
-      logmsg(stderr, "not handling message of type %d\n", event.type);
+      Log::fatal("MArCd", "not handling message of type %d\n", event.type);
     }
   }
 
@@ -146,20 +146,20 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
   rule->vlan_tci_mask=atol(row[4]);
   rule->eth_type=atol(row[5]);
   rule->eth_type_mask=atol(row[6]);
-  
-  
+
+
   rule->ip_proto=atoi(row[11]);
   rule->ip_src.s_addr = inet_addr(row[12]);
   rule->ip_src_mask.s_addr = inet_addr(row[13]);
   rule->ip_dst.s_addr = inet_addr(row[14]);
   rule->ip_dst_mask.s_addr = inet_addr(row[15]);
-  
+
   rule->src_port=atoi(row[16]);
   rule->src_port_mask=atoi(row[17]);
   rule->dst_port=atoi(row[18]);
   rule->dst_port_mask=atoi(row[19]);
   rule->consumer=atoi(row[20]);
-  
+
   inet_atoP((char*)rule->eth_src.ether_addr_octet,row[7]);
   inet_atoP((char*)rule->eth_src_mask.ether_addr_octet,row[8]);
   inet_atoP((char*)rule->eth_dst.ether_addr_octet,row[9]);
@@ -185,20 +185,22 @@ static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sock
   if ( !convMySQLtoFPI(&filter, result) ){
     return 0;
   }
-  
+
   MPfilter.type = MP_FILTER_EVENT;
   mampid_set(MPfilter.MAMPid, MAMPid);
   filter_pack(&filter, &MPfilter.filter);
-  
-  logmsg(verbose, "Sending Filter {%d} to to MP %s.\n", filter.filter_id, mampid_get(MPfilter.MAMPid));
+
+  Log::verbose("MArCd", "Sending Filter {%d} to to MP %s.\n", filter.filter_id, mampid_get(MPfilter.MAMPid));
 
   if ( debug_flag ){
-    hexdump(verbose, (char*)&MPfilter, sizeof(struct MPFilter));
+	  char* repr = hexdump_str((char*)&MPfilter, sizeof(struct MPFilter));
+	  Log::debug("MArcd", "%s", repr);
+	  free(repr);
   }
-  
+
   int ret;
   if ( (ret=marc_push_event(marc, (MPMessage*)&MPfilter, dst)) != 0 ){
-    logmsg(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+    Log::fatal("MArCd", "marc_push_event() returned %d: %s\n", ret, strerror(ret));
     return 0;
   }
 
@@ -218,36 +220,36 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
   memcpy(&MPadr.sin_addr.s_addr, MPinit->ipaddress,sizeof(struct in_addr));
 
-  logmsg(verbose, "MPinitialization from %s:%d:\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
-  logmsg(verbose, "     .type= %d \n",MPinit->type);
-  logmsg(verbose, "     .mac = %s \n", hexdump_address(&MPinit->hwaddr));
-  logmsg(verbose, "     .name= %s \n",MPinit->hostname);
-  logmsg(verbose, "     .ipaddress = %s \n", inet_ntoa(MPadr.sin_addr));
-  logmsg(verbose, "     .port = %d \n", ntohs(MPinit->port));
-  logmsg(verbose, "     .maxFilters = %d \n",ntohs(MPinit->maxFilters));
-  logmsg(verbose, "     .noCI = %d \n", ntohs(MPinit->noCI));
-  logmsg(verbose, "     .MAMPid = %s \n", mampid_get(MPinit->MAMPid));
+  Log::verbose("MArCd", "MPinitialization from %s:%d:\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
+  Log::verbose("MArCd", "     .type= %d \n",MPinit->type);
+  Log::verbose("MArCd", "     .mac = %s \n", hexdump_address(&MPinit->hwaddr));
+  Log::verbose("MArCd", "     .name= %s \n",MPinit->hostname);
+  Log::verbose("MArCd", "     .ipaddress = %s \n", inet_ntoa(MPadr.sin_addr));
+  Log::verbose("MArCd", "     .port = %d \n", ntohs(MPinit->port));
+  Log::verbose("MArCd", "     .maxFilters = %d \n",ntohs(MPinit->maxFilters));
+  Log::verbose("MArCd", "     .noCI = %d \n", ntohs(MPinit->noCI));
+  Log::verbose("MArCd", "     .MAMPid = %s \n", mampid_get(MPinit->MAMPid));
 
   if ( ntohs(MPinit->version.protocol.major) > 0 || ntohs(MPinit->version.protocol.minor) >= 7 ){
-    logmsg(verbose, "     .version.protocol = %d.%d\n", ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor));
-    logmsg(verbose, "     .version.caputils = %d.%d.%d\n", MPinit->version.caputils.major, MPinit->version.caputils.minor , MPinit->version.caputils.micro);
-    logmsg(verbose, "     .version.mp       = %d.%d.%d\n", MPinit->version.self.major, MPinit->version.self.minor , MPinit->version.self.micro);
-    logmsg(verbose, "     .drivers          = %d\n", ntohl(MPinit->drivers));
+    Log::verbose("MArCd", "     .version.protocol = %d.%d\n", ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor));
+    Log::verbose("MArCd", "     .version.caputils = %d.%d.%d\n", MPinit->version.caputils.major, MPinit->version.caputils.minor , MPinit->version.caputils.micro);
+    Log::verbose("MArCd", "     .version.mp       = %d.%d.%d\n", MPinit->version.self.major, MPinit->version.self.minor , MPinit->version.self.micro);
+    Log::verbose("MArCd", "     .drivers          = %d\n", ntohl(MPinit->drivers));
 
     for ( int i = 0; i < ntohs(MPinit->noCI); i++ ){
-      logmsg(verbose, "     .CI[%d].iface      = %.8s\n", i, MPinit->CI[i].iface);
+      Log::verbose("MArCd", "     .CI[%d].iface      = %.8s\n", i, MPinit->CI[i].iface);
     }
   }
-  
+
   if ( !db_query("SELECT MAMPid FROM measurementpoints WHERE mac='%s' AND name='%s'", hexdump_address(&MPinit->hwaddr), MPinit->hostname) ){
     return;
   }
 
   char MAMPid[16] = {0,};
-  
+
   MYSQL_RES* result = mysql_store_result(&connection);
   if(mysql_num_rows(result)==0){ /* We are a new MP..  */
-    logmsg(verbose, "This is an unregisterd MP.\n");
+    Log::verbose("MArCd", "This is an unregisterd MP.\n");
     mysql_free_result(result);
 
     if ( !db_query("INSERT INTO\n"
@@ -281,8 +283,8 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 	           ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor),
 	           MPinit->version.caputils.major, MPinit->version.caputils.minor , MPinit->version.caputils.micro,
 	           MPinit->version.self.major, MPinit->version.self.minor , MPinit->version.self.micro);
-	  
-	  
+
+
 	  int offset = 0;
 	  for ( int i = 0; i < ntohs(MPinit->noCI); i++ ){
 		  offset += snprintf(iface+offset, 256-offset, "%s;", MPinit->CI[i].iface);
@@ -308,29 +310,30 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 	           MAMPid);
   }
 
-  logmsg(verbose, "MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
+  Log::verbose("MArCd", "MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
   mampid_set(MPauth.MAMPid, MAMPid);
 
   if ( debug_flag ){
-    logmsg(verbose, "Sending authorization reply.\n");
-    hexdump(verbose, (const char*)&MPauth, sizeof(struct MPauth));
+	  char* repr = hexdump_str((const char*)&MPauth, sizeof(struct MPauth));
+	  Log::debug("MArCd", "Sending authorization reply.\n%s", repr);
+	  free(repr);
   }
 
   /* Send authorize message (telling whenever it is authorized or not) */
   if ( (ret=marc_push_event(marc, (MPMessage*)&MPauth, from)) != 0 ){
-    logmsg(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+    Log::fatal("MArCd", "marc_push_event() returned %d: %s\n", ret, strerror(ret));
     return;
   }
 
   if( strlen(MAMPid) == 0){ // The MP exists, but isnt authorized.
     if ( !verbose_flag ){
-      logmsg(stderr, "MPinitialization request from %s:%d -> not authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
+      Log::fatal("MArCd", "MPinitialization request from %s:%d -> not authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
     } else {
-      logmsg(verbose, "This MP exists but is not yet authorized.\n");
+      Log::verbose("MArCd", "This MP exists but is not yet authorized.\n");
     }
     return;
   } else if (!verbose_flag){
-    logmsg(stderr, "MPinitialization request from %s:%d -> authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
+    Log::fatal("MArCd", "MPinitialization request from %s:%d -> authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
   }
 
   /* reset status counters */
@@ -346,9 +349,9 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
   result = mysql_store_result(&connection);
   int rows = (int)mysql_num_rows(result);
-  logmsg(verbose, "MP %s has %d filters assigned.\n", MAMPid, rows);
-  
-  /*process each row*/  
+  Log::verbose("MArCd", "MP %s has %d filters assigned.\n", MAMPid, rows);
+
+  /*process each row*/
   for( int n=0; n < rows; n++ ){
     send_mysql_filter(marc, result, from, MAMPid);
   }
@@ -356,15 +359,15 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
   /* free the result set */
   mysql_free_result(result);
 
-  logmsg(verbose, "MP_init done.\n");
+  Log::verbose("MArCd", "MP_init done.\n");
   return;
 }
 
 static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from){
   LOG_EVENT("MPstatus", mampid_get(MPstat->MAMPid));
-  
+
   if ( MPstat->MAMPid[0] == 0 ){
-    logmsg(stderr, "MPstat with invalid MAMPid (null)\n");
+    Log::fatal("MArCd", "MPstat with invalid MAMPid (null)\n");
     return;
   }
 
@@ -382,7 +385,7 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
   LOG_EVENT("MPFilterID", mampid_get(filter->MAMPid));
 
   if ( filter->MAMPid[0] == 0 ){
-    logmsg(stderr, "MPFilterID with invalid MAMPid (null)\n");
+    Log::fatal("MArCd", "MPFilterID with invalid MAMPid (null)\n");
     return;
   }
 
@@ -393,12 +396,12 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
 
   MYSQL_RES* result = mysql_store_result(&connection);
   if ( !send_mysql_filter(marc, result, from, filter->MAMPid) ){
-    logmsg(verbose, "No filter matching {%02d}\n", ntohl(filter->id));
+    Log::verbose("MArCd", "No filter matching {%02d}\n", ntohl(filter->id));
     MPMessage reply;
     reply.type = MP_FILTER_INVALID_ID;
     int ret;
     if ( (ret=marc_push_event(marc, &reply, from)) != 0 ){
-      logmsg(stderr, "marc_push_event() returned %d: %s\n", ret, strerror(ret));
+      Log::fatal("MArCd", "marc_push_event() returned %d: %s\n", ret, strerror(ret));
     }
   }
   mysql_free_result(result);
@@ -413,8 +416,9 @@ static void __attribute__((unused)) MP_VerifyFilter(int sd, struct sockaddr from
   struct MPVerifyFilter* MyVerify=(struct MPVerifyFilter*)buffer;
   struct filter_packed* f = &MyVerify->filter;
   if(MyVerify->flags==0) {
-    sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', comment='NOT PRESENT'", MyVerify->MAMPid,MyVerify->filter_id); 
+    sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', comment='NOT PRESENT'", MyVerify->MAMPid,MyVerify->filter_id);
   } else {
+	  #warning following format warnings is from unused code that is fubar anyway
     sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', ind='%d', CI_ID='%s', VLAN_TCI='%d', VLAN_TCI_MASK='%d',ETH_TYPE='%d', ETH_TYPE_MASK='%d',ETH_SRC='%s',ETH_SRC_MASK='%s', ETH_DST='%s', ETH_DST_MASK='%s',IP_PROTO='%d', IP_SRC='%s', IP_SRC_MASK='%s', IP_DST='%s', IP_DST_MASK='%s', SRC_PORT='%d', SRC_PORT_MASK='%d', DST_PORT='%d', DST_PORT_MASK='%d', TYPE='%d', CAPLEN='%d', consumer='%d'",
 	    MyVerify->MAMPid, f->filter_id, f->index, f->iface, f->vlan_tci, f->vlan_tci_mask,
 	    f->eth_type,f->eth_type_mask,
@@ -424,16 +428,16 @@ static void __attribute__((unused)) MP_VerifyFilter(int sd, struct sockaddr from
 	    f->ip_src, f->ip_src_mask,
 	    f->ip_dst, f->ip_dst_mask,
 	    f->src_port,f->src_port_mask,f->dst_port,f->dst_port_mask,
-	    stream_addr_type(&f->dest), 
+	    stream_addr_type(&f->dest),
 	    f->caplen,
 	    f->consumer);
-      
+
     sprintf(query, "%s, DESTADDR='%s' ", query, stream_addr_ntoa(&f->dest));
   }
 
   printf("MP_VerifyFilter():\n%s\n",query);
   if ( mysql_query(&connection, query) != 0 ) {
-    logmsg(stderr, "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(&connection), query);
+    Log::fatal("MArCd", "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(&connection), query);
     return;
   }
 
@@ -441,7 +445,7 @@ static void __attribute__((unused)) MP_VerifyFilter(int sd, struct sockaddr from
 }
 
 static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr* from){
-  logmsg(stderr, "Distress signal from MP (MAMPid: %s)\n", mampid);
+  Log::fatal("MArCd", "Distress signal from MP (MAMPid: %s)\n", mampid);
   mp_set_status(mampid, MP_STATUS_DISTRESS);
 }
 

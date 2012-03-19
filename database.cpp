@@ -3,12 +3,8 @@
 #endif
 
 #include "database.h"
-#include <caputils/log.h>
-#define logmsg(fd, ...) logmsg(fd, "MArCd", __VA_ARGS__)
-
-extern int verbose_flag;
-extern int debug_flag;
-extern FILE* verbose;
+#include "log.h"
+#include <cstdarg>
 
 MYSQL connection;
 char db_hostname[64] = "localhost";
@@ -18,11 +14,11 @@ char db_username[64] = {0,};
 char db_password[64] = {0,};
 
 int db_connect(){
-  logmsg(verbose, "Connecting to mysql://%s@%s:%d/%s (using password: %s)\n",
-	 db_username, db_hostname, db_port, db_name, db_password[0] != 0 ? "YES" : "NO");
+	Log::verbose("MArCd", "Connecting to mysql://%s@%s:%d/%s (using password: %s)\n",
+	             db_username, db_hostname, db_port, db_name, db_password[0] != 0 ? "YES" : "NO");
   if ( !mysql_real_connect(&connection, db_hostname, db_username, db_password, db_name,db_port,0,0) ){
-    logmsg(stderr, "Failed to connect to database: %s\n", mysql_error(&connection));
-    return 0;
+	  Log::fatal("MArCd", "Failed to connect to database: %s\n", mysql_error(&connection));
+	  return 0;
   }
   return 1;
 }
@@ -36,19 +32,17 @@ int db_query(const char* sql, ...){
   va_end(ap);
 
   if ( mysql_ping(&connection) != 0 ){
-    logmsg(stderr, "Connection to MySQL lost: %s\n", mysql_error(&connection));
-    logmsg(stderr, "Trying to reconnect.\n");
+    Log::message("MArCd", "Connection to MySQL lost: %s\n", mysql_error(&connection));
+    Log::message("MArCd", "Trying to reconnect.\n");
     if ( !db_connect() ){
-      return 0;
+	    return 0;
     }
   }
 
-  if ( debug_flag ){
-    logmsg(verbose, "Executing SQL query:\n%s\n", query);
-  }
+  Log::debug("MArCd", "Executing SQL query:\n%s\n", query);
 
   if ( mysql_query(&connection,query) != 0 ) {
-    logmsg(stderr, "Failed to execute MySQL query: %s\nThe query was: %s\n", mysql_error(&connection), query);
+	  Log::fatal("MArCd", "Failed to execute MySQL query: %s\nThe query was: %s\n", mysql_error(&connection), query);
     return 0;
   }
 

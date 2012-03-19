@@ -3,8 +3,8 @@
 #endif /* HAVE_CONFIG_H */
 
 #include "daemon.h"
+#include "log.h"
 #include <caputils/log.h>
-#define logmsg(fd, ...) logmsg(fd, "main", __VA_ARGS__)
 
 #include <cstdio>
 #include <cstdlib>
@@ -36,12 +36,7 @@ int Daemon::instantiate_real(Daemon* daemon, unsigned int timeout, pthread_barri
   td->barrier = barrier;
 
   timespec ts;
-  if ( clock_gettime(CLOCK_REALTIME, &ts) != 0 ){
-    ret = errno;
-    fprintf(stderr, "clock_gettime() returned %d: %s\n", ret, strerror(ret));
-    return ret;
-  }
-  
+  clock_gettime(CLOCK_REALTIME, &ts);
   ts.tv_sec  += timeout / 1000;
   ts.tv_nsec += (timeout % 1000) * 1000000;
   if ( ts.tv_nsec > 1000000000 ){
@@ -50,7 +45,7 @@ int Daemon::instantiate_real(Daemon* daemon, unsigned int timeout, pthread_barri
   }
 
   if ( (ret=pthread_create(&daemon->thread, NULL, entry, td)) != 0 ) {
-    fprintf(stderr,"pthread_create() returned %d: %s\n", ret, strerror(ret));
+	  Log::fatal("main", "pthread_create() returned %d: %s\n", ret, strerror(ret));
     return ret;
   }
 
@@ -60,9 +55,9 @@ int Daemon::instantiate_real(Daemon* daemon, unsigned int timeout, pthread_barri
     switch ( saved ){
     case ETIMEDOUT:
       if ( pthread_kill(daemon->thread, 0) == ESRCH ){
-        logmsg(stderr, "sem_timedwait(): child thread died before completing initialization\n");
+	      Log::fatal("main", "sem_timedwait(): child thread died before completing initialization\n");
       } else {
-        logmsg(stderr, "sem_timedwait(): timed out waiting for initialization to finish, but child is still alive\n");
+	      Log::fatal("main", "sem_timedwait(): timed out waiting for initialization to finish, but child is still alive\n");
       }
       /* fallthrough */
 
@@ -70,7 +65,7 @@ int Daemon::instantiate_real(Daemon* daemon, unsigned int timeout, pthread_barri
       break;
 
     default:
-      fprintf(stderr, "sem_timedwait() returned %d: %s\n", saved, strerror(saved));
+	    Log::fatal("main", "sem_timedwait() returned %d: %s\n", saved, strerror(saved));
     }
     return saved;
   }
@@ -88,7 +83,7 @@ void* Daemon::entry(void* data){
   /* setup self-pipe */
   if ( pipe2(daemon->pipe, O_NONBLOCK) != 0 ){
     int saved = errno;
-    logmsg(stderr, "[  main  ] pipe2() returned %d: %s\n", saved, strerror(saved));
+    Log::fatal("main", "pipe2() returned %d: %s\n", saved, strerror(saved));
     td->value = saved;
     sem_post(&td->semaphore);
     return NULL;
@@ -138,7 +133,6 @@ void Daemon::join(){
 void Daemon::interupt(){
   static const char ch = 0;
   if ( write(pipe[1], &ch, 1) < 0 ){
-    /* shouldn't just print this on stderr, but better than silently ignoring it */
-    fprintf(stderr, "write() returned %d: %s\n", errno, strerror(errno));
+	  abort();
   }
 }

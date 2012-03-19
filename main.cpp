@@ -1,5 +1,5 @@
 /***************************************************************************
-                          MARcD.cpp  -  description
+                          MArCd.cpp  -  description
                              -------------------
     begin                : Mon 28 Nov, 2005
     copyright            : (C) 2005 by Patrik Arlos
@@ -60,7 +60,7 @@ in_addr listen_addr;
 in_addr control_addr;
 int verbose_flag = 0;
 int debug_flag = 0;
-FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
+static int syslog_flag = 0;
 bool volatile keep_running = true;
 
 static int drop_priv_flag = 1;
@@ -81,7 +81,7 @@ static struct option long_options[]= {
   {"iface",      required_argument, 0, 'i'},
   {"listen",     required_argument, 0, 'm'},
   {"datadir",    required_argument, 0, FLAG_DATADIR},
-  {"syslog",     no_argument,       0, FLAG_SYSLOG},
+  {"syslog",     no_argument,       &syslog_flag, 1},
 
   /* database options */
   {"dbhost",     required_argument, 0, 'h'},
@@ -145,51 +145,61 @@ void show_usage(){
 
 static int priviledge_drop(){
   if ( getuid() != 0 ){
-    logmsg(stderr, MAIN, "Not executing as uid=0, cannot drop priviledges.\n");
+	  Log::message(MAIN, "Not executing as uid=0, cannot drop priviledges.\n");
     return 0;
   }
 
-  logmsg(stderr, MAIN, "[  main ] Dropping priviledges to uid=%d gid=%d\n", drop_uid, drop_gid);
+  Log::message(MAIN, "Dropping priviledges to uid=%d gid=%d\n", drop_uid, drop_gid);
   if ( setgid(drop_gid) != 0 ){
-    logmsg(stderr, MAIN, "[  main ] setgid() failed: %s\n", strerror(errno));
+	  Log::error(MAIN, "setgid() failed: %s\n", strerror(errno));
     return 1;
   }
   if ( setuid(drop_uid) != 0 ){
-    logmsg(stderr, MAIN, "[  main ] setuid() failed: %s\n", strerror(errno));
+	  Log::error(MAIN, "setuid() failed: %s\n", strerror(errno));
     return 1;
   }
 
   return 0;
 }
 
+int vlogmsg_wrapper(FILE* fd, const char* fmt, va_list ap){
+	/* this "casting" is needed to workaround precision errors because pointers
+	 * isn't supposed to be abused like this */
+	Log::Severity s = Log::NORMAL;
+	if ( fd == (FILE*)Log::VERBOSE ) s = Log::VERBOSE;
+
+	Log::log("MArCd", s, fmt, ap);
+	return 1;
+}
+
 int logmsg_wrapper(FILE* fd, const char* fmt, ...){
   va_list ap;
   va_start(ap, fmt);
-  int ret = vlogmsg(fd, "MArCd", fmt, ap);
+  int ret = vlogmsg_wrapper(fd, fmt, ap);
   va_end(ap);
   return ret;
-}
-
-int vlogmsg_wrapper(FILE* fd, const char* fmt, va_list ap){
-  return vlogmsg(fd, "MArCd", fmt, ap);
 }
 
 static void setup_output(){
   /* force verbose if debug is enabled */
   verbose_flag |= debug_flag;
 
-  /* setup vfp to stdout or /dev/null depending on verbose flag */
-  verbose = verbose_flag ? stdout : fopen("/dev/null", "w");
-
-  /* redirect output */
-  marc_set_output_handler(logmsg_wrapper, vlogmsg_wrapper, stderr, verbose);
+  /* redirect output (Ugly pointer casting but the "pointers" is never
+   * dereferenced but passed directly to {,v}logmsg_wrapper which uses it as
+   * severity. */
+  marc_set_output_handler(logmsg_wrapper, vlogmsg_wrapper, (FILE*)Log::NORMAL, (FILE*)Log::VERBOSE);
 
   /* initialize log */
-  Log::set_syslog_destination(Log::VERBOSE);
-  Log::fatal("main", "fatal\n");
-  Log::message("main", "message\n");
-  Log::verbose("main", "verbose\n");
-  Log::debug("main", "debug\n");
+  Log::Severity severity = Log::NORMAL;
+  if ( debug_flag ) severity = Log::DEBUG;
+  else if ( verbose_flag ) severity = Log::VERBOSE;
+
+  if ( syslog_flag == 0 ){
+	  Log::set_file_destination(stderr, severity);
+  } else {
+	  Log::set_syslog_destination(severity);
+  }
+  Log::message(MAIN, "%s-"VERSION" starting.", program_name);
 }
 
 static void default_env(){
@@ -212,30 +222,35 @@ static void default_env(){
 
 static int check_env(){
   if ( db_name[0] == 0 ){
-    logmsg(stderr, MAIN, "No database specified.\n");
+	  Log::fatal(MAIN, "No database specified.\n");
     return 0;
   }
 
+  if ( db_username[0] == 0 ){
+	  Log::fatal(MAIN, "No database user specified.\n");
+	  return 0;
+  }
+
   if ( access(rrdpath, W_OK) != 0 ){
-    logmsg(stderr, MAIN, "Need write persmission to data dir: %s\n", rrdpath);
+	  Log::fatal(MAIN, "Need write persmission to data dir: %s\n", rrdpath);
     return 0;
   }
   return 1;
 }
 
 static void show_env(){
-  logmsg(stderr, MAIN, "Datadir: %s\n", rrdpath);
+	Log::message(MAIN, "Datadir: %s\n", rrdpath);
 }
 
 static void sigint(int signum){
   putc('\r', stderr);
   if ( keep_running ){
-    logmsg(stderr, MAIN, "Caught termination signal, stopping threads.\n");
+	  Log::message(MAIN, "Caught termination signal, stopping threads.\n");
     keep_running = false;
     Daemon::interupt_all();
   } else {
-    logmsg(stderr, MAIN, "Caught termination signal again, aborting.\n");
-    exit(1);
+	  Log::fatal(MAIN, "Caught termination signal again, aborting.\n");
+	  abort();
   }
 }
 
@@ -291,7 +306,7 @@ int load_config(int argc, char* argv[]){
     return 0;
   }
 
-  logmsg(stderr, MAIN, "Loading configuration from \"%s\".\n", filename);
+  Log::message(MAIN, "Loading configuration from \"%s\".\n", filename);
 
   /* parse configuration */
   if ( !(config=iniparser_load(filename)) ){
@@ -408,18 +423,18 @@ int main(int argc, char *argv[]){
 	int sd = socket(AF_INET, SOCK_DGRAM, 0);
 
 	if ( sd < 0 ){
-	  logmsg(stderr, MAIN, "Failed to open socket: %s\n", strerror(errno));
+		Log::fatal(MAIN, "Failed to open socket: %s\n", strerror(errno));
 	  exit(1);
 	}
 
 	if( ioctl(sd, SIOCGIFINDEX, &ifr) == -1 ) {
-	  logmsg(stderr, MAIN, "%s is not a valid interface: %s", optarg, strerror(errno));
-	  continue;
+		Log::fatal(MAIN, "%s is not a valid interface: %s", optarg, strerror(errno));
+		exit(1);
 	}
 
 	if( ioctl(sd, SIOCGIFADDR, &ifr) == -1 ) {
-	  logmsg(stderr, MAIN, "Failed to get IP on interface %s: %s", optarg, strerror(errno));
-	  continue;
+		Log::fatal(MAIN, "Failed to get IP on interface %s: %s", optarg, strerror(errno));
+		exit(1);
 	}
 
 	iface = optarg;
@@ -435,7 +450,7 @@ int main(int argc, char *argv[]){
 	if ( tmp > 0 ){
 	  ma_relay_port = tmp;
 	} else {
-	  logmsg(stderr, MAIN, "Invalid port given to --relay: %s. Ignored\n", optarg);
+		Log::error(MAIN, "Invalid port given to --relay: %s. Ignored\n", optarg);
 	}
       }
 
@@ -475,12 +490,12 @@ int main(int argc, char *argv[]){
   control_addr.s_addr = listen_addr.s_addr;
 
   if ( have_control_daemon && (ret=Daemon::instantiate<Control>(2000, &barrier)) != 0 ){
-    logmsg(stderr, MAIN, "Failed to initialize control daemon, terminating.\n");
+	  Log::fatal(MAIN, "Failed to initialize control daemon, terminating.\n");
     return ret;
   }
 
   if ( have_relay_daemon && (ret=Daemon::instantiate<Relay>(2000, &barrier)) != 0 ){
-    logmsg(stderr, MAIN, "Failed to initialize relay daemon, terminating.\n");
+	  Log::fatal(MAIN, "Failed to initialize relay daemon, terminating.\n");
     return ret;
   }
 
@@ -494,11 +509,12 @@ int main(int argc, char *argv[]){
 
   /* release all threads and wait for them to finish*/
   pthread_barrier_wait(&barrier);
-  logmsg(stderr, MAIN, "Threads started. Going to sleep. Abort with SIGINT\n");
+  Log::message(MAIN, "Threads started. Going to sleep. Abort with SIGINT\n");
   Daemon::join_all();
 
   /* cleanup */
   free(rrdpath);
 
+  Log::message(MAIN, "%s terminated.\n", program_name);
   return 0;
 }

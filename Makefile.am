@@ -27,7 +27,7 @@ MArCd_SOURCES = \
 
 MArelayD_CXXFLAGS = -Wall -DBUILD_RELAY ${libcap_marc_CFLAGS}
 MArelayD_LDADD = ${libcap_marc_LIBS}
-MArelayD_SOURCES = relay.cpp
+MArelayD_SOURCES = relay.cpp log.cpp
 
 install-exec-hook:
 	install -d ${DESTDIR}${pkgdatadir}
