@@ -1,7 +1,7 @@
 #ifndef MARCD_CONTROL_H
 #define MARCD_CONTROL_H
 
-#include "daemon.h"
+#include "daemon.hpp"
 
 class Control: public Daemon {
   public:

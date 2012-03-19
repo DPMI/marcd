@@ -21,6 +21,9 @@
 #include "config.h"
 #endif
 
+#include "relay.hpp"
+#include "log.hpp"
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <time.h>
@@ -38,11 +41,8 @@
 
 #include <getopt.h>
 
-#include "relay.h"
-#include "log.h"
-
 #ifndef BUILD_RELAY
-#include "database.h"
+#include "database.hpp"
 #else
 /* if we're building the relay (and maybe only the relay) we don't want to
  * depend on the mysql libraries, so the database header isn't included at all

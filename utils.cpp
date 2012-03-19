@@ -2,7 +2,7 @@
 #include "config.h"
 #endif
 
-#include "utils.h"
+#include "utils.hpp"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>

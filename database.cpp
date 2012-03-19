@@ -2,8 +2,8 @@
 #include "config.h"
 #endif
 
-#include "database.h"
-#include "log.h"
+#include "database.hpp"
+#include "log.hpp"
 #include <cstdarg>
 
 MYSQL connection;

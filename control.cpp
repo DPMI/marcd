@@ -2,10 +2,14 @@
 #include "config.h"
 #endif
 
-#include "control.h"
-#include "database.h"
-#include "utils.h"
-#include "log.h"
+#include "control.hpp"
+#include "database.hpp"
+#include "utils.hpp"
+#include "log.hpp"
+
+#define LOG_EVENT(x, mampid)							\
+	Log::verbose("control", x " from %s:%d (MAMPid: %s)\n", \
+  inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid)
 
 #include <caputils/marc.h>
 #include <caputils/log.h>

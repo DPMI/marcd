@@ -2,8 +2,8 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
-#include "daemon.h"
-#include "log.h"
+#include "daemon.hpp"
+#include "log.hpp"
 #include <caputils/log.h>
 
 #include <cstdio>

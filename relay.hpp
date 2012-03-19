@@ -1,7 +1,7 @@
 #ifndef MA_RELAY_H
 #define MA_RELAY_H
 
-#include "daemon.h"
+#include "daemon.hpp"
 
 class Relay: public Daemon {
 public:

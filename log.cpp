@@ -2,7 +2,7 @@
 #include "config.h"
 #endif
 
-#include "log.h"
+#include "log.hpp"
 #include <caputils/log.h>
 #include <cstdio>
 #include <cstdlib>

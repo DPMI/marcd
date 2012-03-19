@@ -2,7 +2,7 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
-#include "log.h"
+#include "log.hpp"
 #include <caputils/marc.h>
 #include <caputils/log.h>
 

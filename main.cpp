@@ -21,10 +21,10 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
-#include "control.h"
-#include "relay.h"
-#include "database.h"
-#include "log.h"
+#include "control.hpp"
+#include "relay.hpp"
+#include "database.hpp"
+#include "log.hpp"
 
 #include <caputils/marc.h>
 #include <caputils/log.h>
