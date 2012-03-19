@@ -24,6 +24,7 @@
 #include "control.h"
 #include "relay.h"
 #include "database.h"
+#include "log.h"
 
 #include <caputils/marc.h>
 #include <caputils/log.h>
@@ -182,6 +183,13 @@ static void setup_output(){
 
   /* redirect output */
   marc_set_output_handler(logmsg_wrapper, vlogmsg_wrapper, stderr, verbose);
+
+  /* initialize log */
+  Log::set_file_destination(fopen("foo.log","w"), Log::VERBOSE);
+  Log::fatal("main", "fatal\n");
+  Log::message("main", "message\n");
+  Log::verbose("main", "verbose\n");
+  Log::debug("main", "debug\n");
 }
 
 static void default_env(){

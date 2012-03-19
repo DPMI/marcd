@@ -22,6 +22,7 @@ MArCd_SOURCES = \
 	relay.cpp relay.h \
 	status.cpp \
 	utils.cpp utils.h \
+	log.cpp log.h \
 	main.cpp
 
 MArelayD_CXXFLAGS = -Wall -DBUILD_RELAY ${libcap_marc_CFLAGS}
