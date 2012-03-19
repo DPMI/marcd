@@ -1,5 +1,7 @@
 marcd-0.7.6
 -----------
 
+	* [add] support for syslog.
+	* [fix] restructured folder layout.
 	* [fix] linkage against libcap_filter.
 	* [fix] (re)allow user to set listen port.
