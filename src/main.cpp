@@ -256,7 +256,7 @@ static void sigint(int signum){
 
 #ifdef HAVE_INIPARSER_H
 int load_config(int argc, char* argv[]){
-	const char* filename = NULL;
+	char* filename = NULL;
 	dictionary* config = NULL;
 
 	/* locate configuration filename. This is done before getopt since getopt has
@@ -274,7 +274,7 @@ int load_config(int argc, char* argv[]){
 			return 1;
 		}
 
-		filename = argv[i+1];
+		filename = strdup(argv[i+1]);
 	}
 
 	/* if no configuration file was explicitly required try default paths */
@@ -288,15 +288,13 @@ int load_config(int argc, char* argv[]){
 		}
 
 		if ( access(tmp, R_OK) == 0 ){
-			char* mem = (char*)alloca(strlen(tmp)+1); /* allocate on stack */
-			strcpy(mem, tmp);
-			free(tmp);
-			filename = mem;
+			filename = tmp;
 		}
 
 		/* try default filename in pwd (has precedence of sysconfdir) */
 		if ( access(MARCD_DEFAULT_CONFIG_FILE, R_OK) == 0 ){
-			filename = MARCD_DEFAULT_CONFIG_FILE;
+			free(filename);
+			filename = strdup(MARCD_DEFAULT_CONFIG_FILE);
 		}
 	}
 
@@ -312,6 +310,7 @@ int load_config(int argc, char* argv[]){
 	if ( !(config=iniparser_load(filename)) ){
 		return 1;
 	}
+	free(filename);
 
 	const char* value = NULL;
 
