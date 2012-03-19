@@ -31,3 +31,12 @@ MArelayD_SOURCES = src/relay.cpp src/log.cpp src/log.hpp
 
 install-exec-hook:
 	install -d ${DESTDIR}${pkgdatadir}
+
+debpkgname=marcd_@VERSION@_@ARCH@
+
+deb: all
+	@test "x${prefix}" = "x/usr" || (echo "Error: --prefix must be /usr when creating debian release (currently ${prefix})"; exit 1)
+	mkdir -p $(debpkgname)/DEBIAN
+	cp dist/deb-control $(debpkgname)/DEBIAN/control
+	$(MAKE) install DESTDIR=`pwd`/$(debpkgname)
+	dpkg-deb --build $(debpkgname)

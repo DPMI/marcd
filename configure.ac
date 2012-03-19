@@ -5,7 +5,7 @@ AM_INIT_AUTOMAKE([-Wall 1.11 foreign check-news])
 AM_SILENT_RULES([yes])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([config.h])
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile dist/deb-control])
 
 AC_PROG_CXX
 AC_PROG_RANLIB
@@ -42,5 +42,11 @@ AS_IF([test "x$with_syslog" != "xno"], [
 
 AC_DEFINE([MA_CONTROL_DEFAULT_PORT], [1600], [Which port MArCd should listen on])
 AC_DEFINE([MA_RELAY_DEFAULT_PORT], [1500], [Which port MArelayD should listen on])
+
+dnl Find out what arch is used for (debian) packaging.
+ARCH=`echo $host|cut -d '-' -f 1`
+AS_IF([test "$ARCH" = "i686"], [ARCH="i386"])
+AS_IF([test "$ARCH" = "x86_64"], [ARCH="amd64"])
+AC_SUBST(ARCH)
 
 AC_OUTPUT
