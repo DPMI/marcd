@@ -19,9 +19,11 @@ AC_ARG_ENABLE([daemon], [AS_HELP_STRING([--enable-daemon], [Build MArCd @<:@defa
 AC_ARG_ENABLE([relay],  [AS_HELP_STRING([--enable-relay],  [Build MArelayD @<:@default=enabled@:>@])])
 
 pkgdatadir="${localstatedir}/marc"
+pkgconfdir="${sysconfdir}/marc"
 AC_SUBST(pkgdatadir)
+AC_SUBST(pkgconfdir)
 AX_DEFINE_DIR([DATA_DIR], [pkgdatadir], [Directory where datafiles are stored])
-AX_DEFINE_DIR([SYSCONF_DIR], [sysconfdir], [installation directory for read-only signle-machine data])
+AX_DEFINE_DIR([SYSCONF_DIR], [pkgconfdir], [installation directory for read-only signle-machine data])
 
 AS_IF([test "x$with_daemon" != "xno"], [
 	MYSQL_CLIENT

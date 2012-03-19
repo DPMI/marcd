@@ -11,7 +11,7 @@ if BUILD_RELAY
 bin_PROGRAMS += MArelayD
 endif
 
-sysconf_DATA = marcd.conf.dist
+pkgconf_DATA = marcd.conf.dist
 
 MArCd_CXXFLAGS = -Wall -pthread ${MYSQL_CLIENT_CFLAGS} ${libcap_marc_CFLAGS} ${RRDTOOL_CFLAGS}
 MArCd_LDADD = ${MYSQL_CLIENT_LIBS} ${libcap_marc_LIBS} ${libcap_filter_LIBS} ${RRDTOOL_LIBS}
