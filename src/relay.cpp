@@ -104,7 +104,7 @@ int Relay::init(){
 
 	/* bind local server port */
 	addr.sin_port = htons(ma_relay_port);
-	Log::fatal("relay", "Listens to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+	Log::verbose("relay", "Listens to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 	if ( bind(sd, (struct sockaddr *)&addr, sizeof(addr)) < 0 ){
 		Log::fatal("relay", "cannot bind port number %d\n", ma_relay_port);
 		return 1;
