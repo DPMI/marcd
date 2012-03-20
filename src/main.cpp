@@ -250,6 +250,10 @@ static int check_env(){
 
 static void show_env(){
 	Log::message(MAIN, "Datadir: %s\n", rrdpath);
+	Log::message(MAIN, "Pidfile: %s\n", pidfile);
+	if ( drop_priv_flag ){
+		Log::message(MAIN, "User/Group: %s:%s\n", drop_username, drop_group);
+	}
 }
 
 static void sigint(int signum){
@@ -507,6 +511,11 @@ int main(int argc, char *argv[]){
 	}
 	show_env();
 
+	/* drop priviledges */
+	if ( drop_priv_flag ){
+		priviledge_drop();
+	}
+
 	if ( daemon_mode ){
 		if ( access(pidfile, R_OK) == 0 ){
 			Log::fatal(MAIN, "pidfile `%s' already exists, make sure no other %s is running.\n", pidfile, program_name);
@@ -542,11 +551,6 @@ int main(int argc, char *argv[]){
 		unlink(pidfile);
 		Log::fatal(MAIN, "Failed to initialize relay daemon, terminating.\n");
 		return ret;
-	}
-
-	/* drop priviledges */
-	if ( drop_priv_flag ){
-		priviledge_drop();
 	}
 
 	/* install signal handler */
