@@ -66,7 +66,7 @@ int Control::init(){
 }
 
 int Control::cleanup(){
-	Log::fatal("MArCd", "Thread finished.\n");
+	Log::verbose("MArCd", "Thread finished.\n");
 	return 0;
 }
 

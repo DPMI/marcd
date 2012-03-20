@@ -123,7 +123,7 @@ int Relay::init(){
 }
 
 int Relay::cleanup(){
-	Log::fatal("relay", "Thread finished.\n");
+	Log::verbose("relay", "Thread finished.\n");
 	return 0;
 }
 
