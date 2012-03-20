@@ -58,6 +58,8 @@ char* rrdpath;
 char* iface = NULL;
 in_addr listen_addr;
 in_addr control_addr;
+static int daemon_mode = 0;
+static const char* pidfile = DATA_DIR"/marc.pid";
 int verbose_flag = 0;
 int debug_flag = 0;
 static int syslog_flag = 0;
@@ -74,6 +76,8 @@ enum LongFlags {
 	FLAG_USER,
 	FLAG_GROUP,
 	FLAG_SYSLOG,
+	FLAG_PIDFILE,
+	FLAG_DAEMON
 };
 
 static struct option long_options[]= {
@@ -82,6 +86,8 @@ static struct option long_options[]= {
 	{"listen",     required_argument, 0, 'm'},
 	{"datadir",    required_argument, 0, FLAG_DATADIR},
 	{"syslog",     no_argument,       &syslog_flag, 1},
+	{"daemon",     no_argument,       0, FLAG_DAEMON},
+	{"pidfile",    required_argument, 0, FLAG_PIDFILE},
 
 	/* database options */
 	{"dbhost",     required_argument, 0, 'h'},
@@ -117,10 +123,15 @@ void show_usage(){
 	       "      --datadir=PATH  Use PATH as rrdtool data storage. [default: \n"
 	       "                      " DATA_DIR "]\n"
 	       "      --syslog        Write output to syslog instead of stderr.\n"
+	       "      --daemon        Fork to background.\n"
+	       "      --pidfile=FILE  When in daemon mode it stores the pid here\n"
+#ifdef HAVE_INIPARSER_H
+	       "  -f, --config=PATH   Load configuration from PATH [default: " MARCD_DEFAULT_CONFIG_FILE "]\n"
+#endif
 	       "\n"
 	       "Database options\n"
 	       "  -h, --dbhost        MySQL database host. [Default: localhost]\n"
-	       "      --database      Database name.\n"
+	       "  -d  --database      Database name.\n"
 	       "  -u, --dbusername    Database username. [Default: current user]\n"
 	       "  -p, --dbpassword    Database password, use '-' to read password from\n"
 	       "                      stdin. [Default: none]\n"
@@ -132,9 +143,6 @@ void show_usage(){
 	       "      --group GROUP   Change GID to this group. [default: marc]\n"
 	       "\n"
 	       "Other\n"
-#ifdef HAVE_INIPARSER_H
-	       "  -f, --config=PATH   Load configuration from PATH [default: " MARCD_DEFAULT_CONFIG_FILE "]\n"
-#endif
 	       "      --verbose       Verbose output.\n"
 	       "      --quiet         Inverse of --verbose.\n"
 	       "      --debug         Show extra debugging output, including hexdump of\n"
@@ -371,9 +379,13 @@ int main(int argc, char *argv[]){
 
 	opterr=0;
 	optopt=0;
-	while ( (op = getopt_long(argc, argv, "r::i:h:u:p:f:", long_options, &option_index)) != -1 ){
+	while ( (op = getopt_long(argc, argv, "dr::i:h:u:p:f:", long_options, &option_index)) != -1 ){
 		switch (op){
 		case 0: /* long opt */
+			break;
+
+		case FLAG_DAEMON: /* --daemon */
+			daemon_mode = 1;
 			break;
 
 		case 'v':
@@ -460,6 +472,10 @@ int main(int argc, char *argv[]){
 			rrdpath = strdup(optarg);
 			break;
 
+		case FLAG_PIDFILE:
+			pidfile = optarg;
+			break;
+
 		default:
 			fprintf(stderr, "unhandled option '%c'.\n", op);
 			abort();
@@ -479,6 +495,23 @@ int main(int argc, char *argv[]){
 		return 1;
 	}
 	show_env();
+
+	if ( daemon_mode ){
+		if ( access(pidfile, R_OK) == 0 ){
+			Log::fatal(MAIN, "pidfile `%s' already exists, make sure no other %s is running.\n", pidfile, program_name);
+			return 1;
+		}
+
+		Log::message(MAIN, "forking to background\n");
+		pid_t pid = fork();
+
+		if ( pid ){ /* parent */
+			FILE* fp = fopen(pidfile, "w");
+			fprintf(fp, "%d\n", pid);
+			fclose(fp);
+			return 0;
+		}
+	}
 
 	/* initialize daemons */
 	pthread_barrier_t barrier;
@@ -508,7 +541,11 @@ int main(int argc, char *argv[]){
 
 	/* release all threads and wait for them to finish*/
 	pthread_barrier_wait(&barrier);
-	Log::message(MAIN, "Threads started. Going to sleep. Abort with SIGINT\n");
+	if ( daemon_mode ){
+		Log::message(MAIN, "Threads started. Going to sleep.\n");
+	} else {
+		Log::message(MAIN, "Threads started. Going to sleep. Abort with SIGINT\n");
+	}
 	Daemon::join_all();
 
 	/* cleanup */
