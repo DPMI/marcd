@@ -553,6 +553,7 @@ int main(int argc, char *argv[]){
 	/* release all threads and wait for them to finish*/
 	pthread_barrier_wait(&barrier);
 	if ( daemon_mode ){
+		unlink(pidfile);
 		Log::message(MAIN, "Threads started. Going to sleep.\n");
 	} else {
 		Log::message(MAIN, "Threads started. Going to sleep. Abort with SIGINT\n");
