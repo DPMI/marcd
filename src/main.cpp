@@ -209,7 +209,7 @@ static void setup_output(){
 	} else {
 		Log::set_syslog_destination(severity);
 	}
-	Log::message(MAIN, "%s-"VERSION" starting.\n", program_name);
+	Log::message(MAIN, "%s-"VERSION" (caputils-" CAPUTILS_VERSION ") starting.\n", program_name);
 }
 
 static void default_env(){
@@ -356,8 +356,6 @@ int load_config(int argc, char* argv[]){
 #endif /* HAVE_INIPARSER_H */
 
 int main(int argc, char *argv[]){
-	printf("MArCd " VERSION " (caputils-" CAPUTILS_VERSION ")\n");
-
 	/* extract program name from path. e.g. /path/to/MArCd -> MArCd */
 	const char* separator = strrchr(argv[0], '/');
 	if ( separator ){
