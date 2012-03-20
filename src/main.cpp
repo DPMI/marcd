@@ -314,8 +314,6 @@ int load_config(int argc, char* argv[]){
 		return 0;
 	}
 
-	Log::message(MAIN, "Loading configuration from \"%s\".\n", filename);
-
 	/* parse configuration */
 	if ( !(config=iniparser_load(filename)) ){
 		return 1;
