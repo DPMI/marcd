@@ -66,6 +66,8 @@ static int syslog_flag = 0;
 bool volatile keep_running = true;
 
 static int drop_priv_flag = 1;
+static const char* drop_username = "marc";
+static const char* drop_group = "marc";
 static uid_t drop_uid = -1;
 static gid_t drop_gid = -1;
 static bool have_control_daemon = false;
@@ -213,8 +215,8 @@ static void setup_output(){
 static void default_env(){
 	listen_addr.s_addr = htonl(INADDR_ANY);
 	rrdpath = strdup(DATA_DIR);
-	struct passwd* passwd = getpwnam("marc");
-	struct group* group = getgrnam("marc");
+	struct passwd* passwd = getpwnam(drop_username);
+	struct group* group = getgrnam(drop_group);
 	if ( passwd ){
 		drop_uid = passwd->pw_uid;
 	}
@@ -387,6 +389,14 @@ int main(int argc, char *argv[]){
 
 		case FLAG_DAEMON: /* --daemon */
 			daemon_mode = 1;
+			break;
+
+		case FLAG_USER: /* --user */
+			drop_username = optarg;
+			break;
+
+		case FLAG_GROUP: /* --group */
+			drop_group = optarg;
 			break;
 
 		case 'v':
