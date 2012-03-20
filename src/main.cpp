@@ -381,6 +381,7 @@ int main(int argc, char *argv[]){
 	optopt=0;
 	while ( (op = getopt_long(argc, argv, "dr::i:h:u:p:f:", long_options, &option_index)) != -1 ){
 		switch (op){
+		case '?':
 		case 0: /* long opt */
 			break;
 
@@ -477,7 +478,11 @@ int main(int argc, char *argv[]){
 			break;
 
 		default:
-			fprintf(stderr, "unhandled option '%c'.\n", op);
+			if ( option_index >= 0 ){
+				fprintf(stderr, "flag --%s declared but not handled\n", long_options[option_index].name);
+			} else {
+				fprintf(stderr, "flag -%c declared but not handled\n", op);
+			}
 			abort();
 		}
 	}
