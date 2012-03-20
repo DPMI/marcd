@@ -48,8 +48,8 @@ void Log::fatal(const char* component, const char* fmt, ...){
 	log(component, Log::FATAL, fmt, ap);
 
 	/* always log fatal to stderr */
-	//fp = stderr;
-	//file_log(component, Log::FATAL, fmt, ap2);
+	fp = stderr;
+	file_log(component, Log::FATAL, fmt, ap2);
 
 	va_end(ap);
 	va_end(ap2);
