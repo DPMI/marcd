@@ -533,11 +533,13 @@ int main(int argc, char *argv[]){
 	control_addr.s_addr = listen_addr.s_addr;
 
 	if ( have_control_daemon && (ret=Daemon::instantiate<Control>(2000, &barrier)) != 0 ){
+		unlink(pidfile);
 		Log::fatal(MAIN, "Failed to initialize control daemon, terminating.\n");
 		return ret;
 	}
 
 	if ( have_relay_daemon && (ret=Daemon::instantiate<Relay>(2000, &barrier)) != 0 ){
+		unlink(pidfile);
 		Log::fatal(MAIN, "Failed to initialize relay daemon, terminating.\n");
 		return ret;
 	}
