@@ -601,6 +601,12 @@ int main(int argc, char *argv[]){
 		if ( pid ){ /* parent */
 			fprintf(fp, "%d\n", pid);
 			fclose(fp);
+
+			/* change owner of pidfile */
+			if ( drop_priv_flag ){
+				chown(pidfile, drop_uid, drop_gid);
+			}
+
 			return 0;
 		}
 
