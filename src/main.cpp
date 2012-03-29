@@ -45,7 +45,9 @@
 #include <sys/ioctl.h>
 
 #ifdef HAVE_INIPARSER_H
+extern "C" {
 #include <iniparser.h>
+}
 #define MARCD_DEFAULT_CONFIG_FILE "marcd.conf"
 #endif
 

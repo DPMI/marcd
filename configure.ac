@@ -44,6 +44,9 @@ AS_IF([test "x$with_syslog" != "xno"], [
 AC_DEFINE([MA_CONTROL_DEFAULT_PORT], [1600], [Which port MArCd should listen on])
 AC_DEFINE([MA_RELAY_DEFAULT_PORT], [1500], [Which port MArelayD should listen on])
 
+dnl If --with-iniparser=bundle is specified build the source
+AM_CONDITIONAL(BUNDLE_INIPARSER, [test "x$ax_iniparser_bundle" = "xyes"])
+
 dnl Find out what arch is used for (debian) packaging.
 ARCH=`echo $host|cut -d '-' -f 1`
 AS_IF([test "$ARCH" = "i686"], [ARCH="i386"])
