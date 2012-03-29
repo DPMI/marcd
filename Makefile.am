@@ -36,7 +36,12 @@ debpkgname=marcd_@VERSION@_@ARCH@
 
 deb: all
 	@test "x${prefix}" = "x/usr" || (echo "Error: --prefix must be /usr when creating debian release (currently ${prefix})"; exit 1)
+	@test "x${sysconfdir}" = "x/etc" || (echo "Error: --sysconfdir must be /etc when creating debian release (currently ${sysconfdir})"; exit 1)
+	@test "x${localstatedir}" = "x/var/lib" || (echo "Error: --localstatedir must be /var/lib when creating debian release (currently ${localstatedir})"; exit 1)
+
 	mkdir -p $(debpkgname)/DEBIAN
+	mkdir -p $(debpkgname)/$(pkgdatadir)
+	mkdir -p $(debpkgname)/$(pkgconfdir)
 	cp dist/deb-control $(debpkgname)/DEBIAN/control
 	$(MAKE) install DESTDIR=`pwd`/$(debpkgname)
 	dpkg-deb --build $(debpkgname)
