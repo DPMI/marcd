@@ -5,6 +5,7 @@
 #include "database.hpp"
 #include "log.hpp"
 #include <cstdarg>
+#include <cstdlib>
 
 MYSQL connection;
 char db_hostname[64] = "localhost";
@@ -12,6 +13,7 @@ int  db_port = MYSQL_PORT;
 char db_name[64] = {0,};
 char db_username[64] = {0,};
 char db_password[64] = {0,};
+static const int marc_web_requirement = 1;
 
 int db_connect(){
 	Log::verbose("MArCd", "Connecting to mysql://%s@%s:%d/%s (using password: %s)\n",
@@ -20,6 +22,18 @@ int db_connect(){
 	  Log::fatal("MArCd", "Failed to connect to database: %s\n", mysql_error(&connection));
 	  return 0;
   }
+
+  if ( !db_query("SELECT `num` FROM `version` LIMIT 1") ){
+	  return 0;
+  }
+  MYSQL_RES* result = mysql_use_result(&connection);
+  MYSQL_ROW row = mysql_fetch_row(result);
+  if ( atoi(row[0]) < marc_web_requirement ){
+	  Log::fatal("MArCd", "Database too old, run marc_web update script.\n");
+	  return 0;
+  }
+  mysql_free_result(result);
+
   return 1;
 }
 
