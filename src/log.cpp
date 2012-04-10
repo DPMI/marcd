@@ -17,11 +17,7 @@
 typedef void (*log_callback)(const char* component, Log::Severity severity, const char* fmt, va_list ap);
 static Log::Severity severity = Log::NORMAL;
 
-namespace Log {
-	log_callback log = NULL;
-}
-
-static FILE* fp = NULL;;
+static FILE* fp = stderr;
 static void file_log(const char* component, Log::Severity severity, const char* fmt, va_list ap){
 	vlogmsg(fp, component, fmt, ap);
 }
@@ -37,6 +33,10 @@ static void syslog_log(const char* component, Log::Severity severity, const char
 	};
 
 	vsyslog(level_lut[severity], fmt, ap);
+}
+
+namespace Log {
+	log_callback log = file_log;
 }
 
 void Log::fatal(const char* component, const char* fmt, ...){
