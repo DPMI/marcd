@@ -450,12 +450,12 @@ int main(int argc, char *argv[]){
 			}
 
 			if( ioctl(sd, SIOCGIFINDEX, &ifr) == -1 ) {
-				Log::fatal(MAIN, "%s is not a valid interface: %s", optarg, strerror(errno));
+				Log::fatal(MAIN, "%s is not a valid interface: %s\n", optarg, strerror(errno));
 				exit(1);
 			}
 
 			if( ioctl(sd, SIOCGIFADDR, &ifr) == -1 ) {
-				Log::fatal(MAIN, "Failed to get IP on interface %s: %s", optarg, strerror(errno));
+				Log::fatal(MAIN, "Failed to get IP on interface %s: %s\n", optarg, strerror(errno));
 				exit(1);
 			}
 
