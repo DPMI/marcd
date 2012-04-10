@@ -29,8 +29,8 @@ AX_DEFINE_DIR([SYSCONF_DIR], [pkgconfdir], [installation directory for read-only
 AS_IF([test "x$with_daemon" != "xno"], [
 	MYSQL_CLIENT
 	AX_RRDTOOL
-	PKG_CHECK_MODULES([libcap_filter], [libcap_filter-0.7 >= 0.7.4])
-	PKG_CHECK_MODULES([libcap_marc], [libcap_marc-0.7 >= 0.7.4])
+	PKG_CHECK_MODULES([libcap_utils], [libcap_utils-0.7 >= 0.7.7])
+	PKG_CHECK_MODULES([libcap_marc], [libcap_marc-0.7 >= 0.7.7])
 ])
 AM_CONDITIONAL(BUILD_DAEMON, [test "x$enable_daemon" != "xno"])
 AM_CONDITIONAL(BUILD_RELAY,  [test "x$enable_relay" != "xno"])
