@@ -139,36 +139,40 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
 		return 0;
 	}
 
-	rule->filter_id=atoi(row[0]);
-	rule->index=atoi(row[1]);
-	strncpy(rule->iface, row[2], 8);
-	rule->vlan_tci=atol(row[3]);
-	rule->vlan_tci_mask=atol(row[4]);
-	rule->eth_type=atol(row[5]);
-	rule->eth_type_mask=atol(row[6]);
+	/* filter_id, ind, mode, CI_ID, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, consumer, DESTADDR, TYPE, CAPLEN */
 
+	/* base fields */
+	rule->filter_id = atoi(row[0]);
+	rule->index = atoi(row[1]);
+	rule->mode = (FilterMode)atoi(row[2]);
+	rule->consumer = atoi(row[21]);
+	rule->caplen = atoi(row[24]);
 
-	rule->ip_proto=atoi(row[11]);
-	rule->ip_src.s_addr = inet_addr(row[12]);
-	rule->ip_src_mask.s_addr = inet_addr(row[13]);
-	rule->ip_dst.s_addr = inet_addr(row[14]);
-	rule->ip_dst_mask.s_addr = inet_addr(row[15]);
+	strncpy(rule->iface, row[3], 8);
+	rule->vlan_tci=atol(row[4]);
+	rule->vlan_tci_mask=atol(row[5]);
+	rule->eth_type=atol(row[6]);
+	rule->eth_type_mask=atol(row[7]);
 
-	rule->src_port=atoi(row[16]);
-	rule->src_port_mask=atoi(row[17]);
-	rule->dst_port=atoi(row[18]);
-	rule->dst_port_mask=atoi(row[19]);
-	rule->consumer=atoi(row[20]);
+	inet_atoP((char*)rule->eth_src.ether_addr_octet,row[8]);
+	inet_atoP((char*)rule->eth_src_mask.ether_addr_octet,row[9]);
+	inet_atoP((char*)rule->eth_dst.ether_addr_octet,row[10]);
+	inet_atoP((char*)rule->eth_dst_mask.ether_addr_octet,row[11]);
 
-	inet_atoP((char*)rule->eth_src.ether_addr_octet,row[7]);
-	inet_atoP((char*)rule->eth_src_mask.ether_addr_octet,row[8]);
-	inet_atoP((char*)rule->eth_dst.ether_addr_octet,row[9]);
-	inet_atoP((char*)rule->eth_dst_mask.ether_addr_octet,row[10]);
+	rule->ip_proto=atoi(row[12]);
+	rule->ip_src.s_addr = inet_addr(row[13]);
+	rule->ip_src_mask.s_addr = inet_addr(row[14]);
+	rule->ip_dst.s_addr = inet_addr(row[15]);
+	rule->ip_dst_mask.s_addr = inet_addr(row[16]);
 
-	rule->caplen=atoi(row[23]);
+	rule->src_port=atoi(row[17]);
+	rule->src_port_mask=atoi(row[18]);
+	rule->dst_port=atoi(row[19]);
+	rule->dst_port_mask=atoi(row[20]);
 
-	const char* destination = row[21];
-	enum AddressType type = (enum AddressType)atoi(row[22]);
+	/* destination */
+	const char* destination = row[22];
+	enum AddressType type = (enum AddressType)atoi(row[23]);
 	stream_addr_aton(&rule->dest, destination, type, 0);
 
 	return 1;
@@ -343,7 +347,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 	mp_set_status(MAMPid, MP_STATUS_IDLE);
 
 	/* Lets check if we have any filters waiting for us? */
-	if ( !db_query("SELECT * FROM `%s_filterlist` ORDER BY `filter_id` ASC", MAMPid) ){
+	if ( !db_query("SELECT filter_id, ind, mode+0, CI_ID, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, consumer, DESTADDR, TYPE, CAPLEN FROM `%s_filterlist` ORDER BY `filter_id` ASC", MAMPid) ){
 		return;
 	}
 
@@ -389,7 +393,7 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
 		return;
 	}
 
-	if ( !db_query("SELECT * FROM %s_filterlist WHERE filter_id='%d' LIMIT 1",
+	if ( !db_query("SELECT  filter_id, ind, mode+0, CI_ID, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, consumer, DESTADDR, TYPE, CAPLEN  FROM %s_filterlist WHERE filter_id='%d' LIMIT 1",
 	               mampid_get(filter->MAMPid), ntohl(filter->id)) ){
 		return;
 	}
