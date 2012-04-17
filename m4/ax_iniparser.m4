@@ -13,7 +13,7 @@ AC_DEFUN([AX_INIPARSER], [
     bundle)
       ax_iniparser_bundle=yes
       AC_DEFINE([HAVE_INIPARSER_H])
-      AC_SUBST(iniparser_CFLAGS, ["-zomg -I\${top_srcdir}/bundle"])
+      AC_SUBST(iniparser_CFLAGS, ["-I\${top_srcdir}/bundle"])
       ;;
     *)
       ax_iniparser_want=yes
