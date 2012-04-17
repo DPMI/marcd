@@ -1,0 +1,42 @@
+#!/bin/sh
+# -*- mode: shell; -*-
+
+### BEGIN INIT INFO
+# Provides:          marcd
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start daemon at boot time
+# Description:       Enable service provided by daemon.
+### END INIT INFO
+
+set -e
+
+. /lib/lsb/init-functions
+
+case "$1" in
+    start)
+        log_daemon_msg "Starting MA control daemon" "marcd"
+
+        if [ ! -e /etc/marc/marcd.conf ]; then
+            log_action_msg "No configuration present, create \`/etc/marc/marcd.conf' and try again!"
+						log_end_msg 1
+        elif start-stop-daemon --start --chdir /var/lib/marc --pidfile /var/lib/marc/marcd.pid --exec /usr/bin/MArCd -- \
+            --pidfile /var/lib/marc/marcd.pid \
+            --relay --syslog --daemon; then
+						log_end_msg 0
+				else
+						log_end_msg 1
+				fi
+				;;
+		
+		stop)
+        log_daemon_msg "Stopping MA control daemon" "marcd"
+        if start-stop-daemon --stop --signal INT --pidfile /var/lib/marc/marcd.pid; then
+						log_end_msg 0
+				else
+						log_end_msg 1
+				fi
+				;;
+esac

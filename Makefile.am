@@ -44,8 +44,11 @@ deb: all
 	@test "x${localstatedir}" = "x/var/lib" || (echo "Error: --localstatedir must be /var/lib when creating debian release (currently ${localstatedir})"; exit 1)
 
 	mkdir -p $(debpkgname)/DEBIAN
-	mkdir -p $(debpkgname)/$(pkgdatadir)
-	mkdir -p $(debpkgname)/$(pkgconfdir)
+	mkdir -p $(debpkgname)/$(pkgdatadir) && chmod 0755 $(debpkgname)/$(pkgdatadir)
+	mkdir -p $(debpkgname)/$(pkgconfdir) && chmod 0755 $(debpkgname)/$(pkgconfdir)
 	cp dist/deb-control $(debpkgname)/DEBIAN/control
+	cp $(top_srcdir)/dist/debian-init $(debpkgname)/DEBIAN/marcd.init
 	$(MAKE) install DESTDIR=`pwd`/$(debpkgname)
+	strip $(debpkgname)/usr/bin/MArCd
+	strip $(debpkgname)/usr/bin/MArelayD
 	dpkg-deb --build $(debpkgname)
