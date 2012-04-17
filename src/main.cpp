@@ -519,6 +519,16 @@ int main(int argc, char *argv[]){
 
 	setup_output();
 
+	/* Drop privileges.
+	 * Done before forking since unlinking requires write permission to folder so
+	 * if it fails to write it will fail unlinking. It is also done before
+	 * check_env so it actually check environment for the dropped user instead of
+	 * root.
+	 */
+	if ( drop_priv_flag ){
+		priviledge_drop();
+	}
+
 	/* sanity checks */
 	if ( !check_env() ){
 		return 1;
@@ -543,17 +553,11 @@ int main(int argc, char *argv[]){
 
 		if ( pid ){ /* parent */
 			fprintf(fp, "%d\n", pid);
-			fchown(fileno(fp), drop_uid, drop_gid);
 			fclose(fp);
 			return 0;
 		}
 
 		fclose(fp);
-	}
-
-	/* drop priviledges */
-	if ( drop_priv_flag ){
-		priviledge_drop();
 	}
 
 	/* initialize daemons */
