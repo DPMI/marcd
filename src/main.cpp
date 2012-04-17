@@ -549,7 +549,7 @@ int main(int argc, char *argv[]){
 			return 1;
 		}
 
-		Log::message(MAIN, "forking to background\n");
+		Log::message(MAIN, "Forking to background\n");
 		pid_t pid = fork();
 
 		if ( pid ){ /* parent */
