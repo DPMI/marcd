@@ -161,13 +161,13 @@ static int privilege_drop(){
 		return 0;
 	}
 
-	Log::message(MAIN, "Dropping privileges to uid=%d gid=%d\n", drop_uid, drop_gid);
+	Log::message(MAIN, "Dropping privileges to %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
 	if ( setgid(drop_gid) != 0 ){
-		Log::error(MAIN, "setgid() failed: %s\n", strerror(errno));
+		Log::error(MAIN, "\tsetgid() failed: %s\n", strerror(errno));
 		return 1;
 	}
 	if ( setuid(drop_uid) != 0 ){
-		Log::error(MAIN, "setuid() failed: %s\n", strerror(errno));
+		Log::error(MAIN, "\tsetuid() failed: %s\n", strerror(errno));
 		return 1;
 	}
 
@@ -251,10 +251,11 @@ static int check_env(){
 }
 
 static void show_env(){
-	Log::message(MAIN, "Datadir: %s\n", rrdpath);
-	Log::message(MAIN, "Pidfile: %s\n", pidfile);
+	Log::message(MAIN, "Environment:\n");
+	Log::message(MAIN, "\tDatadir: %s\n", rrdpath);
+	Log::message(MAIN, "\tPidfile: %s\n", pidfile);
 	if ( drop_priv_flag ){
-		Log::message(MAIN, "User/Group: %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
+		Log::message(MAIN, "\tUser/Group: %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
 	}
 }
 
