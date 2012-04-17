@@ -524,15 +524,23 @@ int main(int argc, char *argv[]){
 			return 1;
 		}
 
+		/* opening file before fork since it will be a fatal error if it fails to write the pid */
+		FILE* fp = fopen(pidfile, "w");
+		if ( !fp ){
+			Log::fatal(MAIN, "failed to open '%s` for writing: %s\n", pidfile, strerror(errno));
+			return 1;
+		}
+
 		Log::message(MAIN, "forking to background\n");
 		pid_t pid = fork();
 
 		if ( pid ){ /* parent */
-			FILE* fp = fopen(pidfile, "w");
 			fprintf(fp, "%d\n", pid);
 			fclose(fp);
 			return 0;
 		}
+
+		fclose(fp);
 	}
 
 	/* initialize daemons */
