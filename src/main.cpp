@@ -99,7 +99,7 @@ static struct option long_options[]= {
 	{"dbusername", required_argument, 0, 'u'},
 	{"dbpassword", required_argument, 0, 'p'},
 
-	/* priviledge dropping */
+	/* privilege dropping */
 	{"drop",       no_argument, &drop_priv_flag, 1},
 	{"no-drop",    no_argument, &drop_priv_flag, 0},
 	{"user",       required_argument, 0, FLAG_USER},
@@ -140,8 +140,8 @@ void show_usage(){
 	       "  -p, --dbpassword    Database password, use '-' to read password from\n"
 	       "                      stdin. [Default: none]\n"
 	       "\n"
-	       "Priviledge options\n"
-	       "      --drop          Drop priviledges. [default]\n"
+	       "Privilege options\n"
+	       "      --drop          Drop privileges. [default]\n"
 	       "      --no-drop       Inverse of --drop.\n"
 	       "      --user USER     Change UID to this user. [default: marc]\n"
 	       "      --group GROUP   Change GID to this group. [default: marc]\n"
@@ -155,13 +155,13 @@ void show_usage(){
 	       "      --help          This text\n");
 }
 
-static int priviledge_drop(){
+static int privilege_drop(){
 	if ( getuid() != 0 ){
-		Log::message(MAIN, "Not executing as uid=0, cannot drop priviledges.\n");
+		Log::message(MAIN, "Not executing as uid=0, cannot drop privileges.\n");
 		return 0;
 	}
 
-	Log::message(MAIN, "Dropping priviledges to uid=%d gid=%d\n", drop_uid, drop_gid);
+	Log::message(MAIN, "Dropping privileges to uid=%d gid=%d\n", drop_uid, drop_gid);
 	if ( setgid(drop_gid) != 0 ){
 		Log::error(MAIN, "setgid() failed: %s\n", strerror(errno));
 		return 1;
@@ -526,7 +526,7 @@ int main(int argc, char *argv[]){
 	 * root.
 	 */
 	if ( drop_priv_flag ){
-		priviledge_drop();
+		privilege_drop();
 	}
 
 	/* sanity checks */
