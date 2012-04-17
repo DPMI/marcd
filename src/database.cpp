@@ -56,9 +56,9 @@ int db_query(const char* sql, ...){
   Log::debug("MArCd", "Executing SQL query:\n\t%s\n", query);
 
   if ( mysql_query(&connection,query) != 0 ) {
-	  Log::fatal("MArCd", "Failed to execute MySQL query:\n"
-	             "\tMessage: %s\n"
-	             "\tQuery: %s\n", mysql_error(&connection), query);
+	  Log::fatal("MArCd", "Failed to execute MySQL query.\n");
+	  Log::fatal("MArCd", "\tMessage: %s\n", mysql_error(&connection));
+	  Log::fatal("MArCd", "\tQuery: %s\n", query);
     return 0;
   }
 
