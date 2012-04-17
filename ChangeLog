@@ -1,6 +1,7 @@
 marcd-0.7.6
 -----------
 
+	* [fix] daemon and privilege issues
 	* [add] support for syslog.
 	* [fix] restructured folder layout.
 	* [fix] linkage against libcap_filter.
