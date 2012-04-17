@@ -1,6 +1,8 @@
 Package: marcd
+Section: net
 Version: @VERSION@
 Architecture: @ARCH@
 Maintainer: David Sveningsson [dsv@bth.se]
 Description: MA Control Daemon and Relay
 Homepage: https://194.47.151.119/trac/
+Depends: libcap_utils (>=0.7.7)
