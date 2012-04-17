@@ -24,6 +24,7 @@ int db_connect(){
   }
 
   if ( !db_query("SELECT `num` FROM `version` LIMIT 1") ){
+	  Log::fatal("MArCd", "Database too old, run marc_web update script.\n");
 	  return 0;
   }
   MYSQL_RES* result = mysql_use_result(&connection);
