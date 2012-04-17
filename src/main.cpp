@@ -565,14 +565,18 @@ int main(int argc, char *argv[]){
 	control_addr.s_addr = listen_addr.s_addr;
 
 	if ( have_control_daemon && (ret=Daemon::instantiate<Control>(2000, &barrier)) != 0 ){
-		unlink(pidfile);
 		Log::fatal(MAIN, "Failed to initialize control daemon, terminating.\n");
+		if ( daemon_mode && unlink(pidfile) == -1 ){
+			Log::fatal(MAIN, "Failed to remove pidfile: %s\n", strerror(errno));
+		}
 		return ret;
 	}
 
 	if ( have_relay_daemon && (ret=Daemon::instantiate<Relay>(2000, &barrier)) != 0 ){
-		unlink(pidfile);
 		Log::fatal(MAIN, "Failed to initialize relay daemon, terminating.\n");
+		if ( daemon_mode && unlink(pidfile) == -1 ){
+			Log::fatal(MAIN, "Failed to remove pidfile: %s\n", strerror(errno));
+		}
 		return ret;
 	}
 
@@ -582,7 +586,6 @@ int main(int argc, char *argv[]){
 	/* release all threads and wait for them to finish*/
 	pthread_barrier_wait(&barrier);
 	if ( daemon_mode ){
-		unlink(pidfile);
 		Log::message(MAIN, "Threads started. Going to sleep.\n");
 	} else {
 		Log::message(MAIN, "Threads started. Going to sleep. Abort with SIGINT\n");
@@ -591,6 +594,9 @@ int main(int argc, char *argv[]){
 
 	/* cleanup */
 	free(rrdpath);
+	if ( daemon_mode && unlink(pidfile) == -1 ){
+		Log::fatal(MAIN, "Failed to remove pidfile: %s\n", strerror(errno));
+	}
 
 	Log::message(MAIN, "%s terminated.\n", program_name);
 	return 0;
