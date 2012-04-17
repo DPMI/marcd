@@ -1,3 +1,9 @@
+marcd-0.7.6
+-----------
+
+  * Added support for syslog and daemonization.
+  * Lots of bug- and regressionfixes.
+
 marcd-0.7.5
 -----------
 
