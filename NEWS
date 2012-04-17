@@ -2,6 +2,8 @@ marcd-0.7.6
 -----------
 
   * Added support for syslog and daemonization.
+  * Adding bundled iniparser for platforms without package. (not recommended,
+    must be explicitly requested)
   * Lots of bug- and regressionfixes.
 
 marcd-0.7.5
