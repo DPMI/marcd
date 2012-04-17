@@ -254,7 +254,7 @@ static void show_env(){
 	Log::message(MAIN, "Datadir: %s\n", rrdpath);
 	Log::message(MAIN, "Pidfile: %s\n", pidfile);
 	if ( drop_priv_flag ){
-		Log::message(MAIN, "User/Group: %s:%s\n", drop_username, drop_group);
+		Log::message(MAIN, "User/Group: %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
 	}
 }
 
@@ -395,10 +395,22 @@ int main(int argc, char *argv[]){
 
 		case FLAG_USER: /* --user */
 			drop_username = optarg;
+			{
+				struct passwd* passwd = getpwnam(drop_username);
+				if ( passwd ){
+					drop_uid = passwd->pw_uid;
+				}
+			}
 			break;
 
 		case FLAG_GROUP: /* --group */
 			drop_group = optarg;
+			{
+				struct group* group = getgrnam(drop_group);
+				if ( group ){
+					drop_gid = group->gr_gid;
+				}
+			}
 			break;
 
 		case 'v':
@@ -513,11 +525,6 @@ int main(int argc, char *argv[]){
 	}
 	show_env();
 
-	/* drop priviledges */
-	if ( drop_priv_flag ){
-		priviledge_drop();
-	}
-
 	if ( daemon_mode ){
 		if ( access(pidfile, R_OK) == 0 ){
 			Log::fatal(MAIN, "pidfile `%s' already exists, make sure no other %s is running.\n", pidfile, program_name);
@@ -536,11 +543,17 @@ int main(int argc, char *argv[]){
 
 		if ( pid ){ /* parent */
 			fprintf(fp, "%d\n", pid);
+			fchown(fileno(fp), drop_uid, drop_gid);
 			fclose(fp);
 			return 0;
 		}
 
 		fclose(fp);
+	}
+
+	/* drop priviledges */
+	if ( drop_priv_flag ){
+		priviledge_drop();
 	}
 
 	/* initialize daemons */
