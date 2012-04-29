@@ -442,6 +442,7 @@ int main(int argc, char *argv[]){
 
 		case 'p':
 			if ( strcmp(optarg, "-") == 0 ){ /* read password from stdin */
+				fprintf(stderr, "password: ");
 				if ( fscanf(stdin, "%63s", db_password) != 1 ){
 					fprintf(stderr, "Failed to read password.\n");
 					return 1;
