@@ -442,15 +442,11 @@ int main(int argc, char *argv[]){
 
 		case 'p':
 			if ( strcmp(optarg, "-") == 0 ){ /* read password from stdin */
-				fprintf(stderr, "password: ");
-				if ( fscanf(stdin, "%63s", db_password) != 1 ){
-					fprintf(stderr, "Failed to read password.\n");
-					return 1;
-				}
+				strncpy(db_password, getpass("mysql password: "), sizeof(db_password));
 			} else {
 				strncpy(db_password, optarg, sizeof(db_password));
-				db_password[sizeof(db_password)-1] = '\0';
 			}
+			db_password[sizeof(db_password)-1] = '\0';
 			break;
 
 		case 'i': /* --iface */
