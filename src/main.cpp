@@ -384,7 +384,7 @@ int main(int argc, char *argv[]){
 
 	opterr=0;
 	optopt=0;
-	while ( (op = getopt_long(argc, argv, "dr::i:h:u:p:f:", long_options, &option_index)) != -1 ){
+	while ( (op = getopt_long(argc, argv, "d:r::i:h:u:p:f:", long_options, &option_index)) != -1 ){
 		switch (op){
 		case '?':
 		case 0: /* long opt */
