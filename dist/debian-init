@@ -7,18 +7,23 @@
 # Required-Stop:     $remote_fs $syslog
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: Start daemon at boot time
-# Description:       Enable service provided by daemon.
+# Short-Description: MA control daemon
+# Description:       Measurement Area Control Daemon and Relay.
 ### END INIT INFO
 
 set -e
 
+NAME="MA Control Daemon"
 BINARY=/usr/bin/MArCd
 CONFIGFILE=/etc/marc/marcd.conf
 PIDFILE=/var/lib/marc/marcd.pid
-NAME="MA Control Daemon"
+MARCD_CONFIG=/etc/default/marcd
 
 . /lib/lsb/init-functions
+
+if [ -e ${MARCD_CONFIG} ]; then
+	. ${MARCD_CONFIG}
+fi
 
 case "$1" in
     start)
@@ -32,7 +37,8 @@ case "$1" in
 
 		start-stop-daemon --start --chdir /var/lib/marc --pidfile $PIDFILE --exec $BINARY -- \
             --pidfile $PIDFILE \
-            --relay --syslog --daemon
+            --relay --syslog --daemon --iface ${MARCD_IFACE} \
+            ${MARCD_OPTS}
 		log_end_msg $?
 		;;
 
