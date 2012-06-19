@@ -257,6 +257,7 @@ static void show_env(){
 	if ( drop_priv_flag ){
 		Log::message(MAIN, "\tUser/Group: %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
 	}
+	Log::message(MAIN, "\tDatabase: mysql://%s@%s/%s\n", db_username, db_hostname, db_name);
 }
 
 static void sigint(int signum){
