@@ -269,14 +269,14 @@ static void show_env(){
 	Log::message(MAIN, "\tDatabase: mysql://%s@%s/%s\n", db_username, db_hostname, db_name);
 }
 
-static void sigint(int signum){
+static void handle_signal(int signum){
 	putc('\r', stderr);
 	if ( keep_running ){
-		Log::message(MAIN, "Caught termination signal, stopping threads.\n");
+		Log::message(MAIN, "Caught signal %d, stopping threads.\n", signum);
 		keep_running = false;
 		Daemon::interupt_all();
 	} else {
-		Log::fatal(MAIN, "Caught termination signal again, aborting.\n");
+		Log::fatal(MAIN, "Caught signal again, aborting.\n");
 		abort();
 	}
 }
@@ -613,7 +613,8 @@ int main(int argc, char *argv[]){
 	}
 
 	/* install signal handler */
-	signal(SIGINT, sigint);
+	signal(SIGINT, handle_signal);
+	signal(SIGTERM, handle_signal);
 
 	/* release all threads and wait for them to finish*/
 	pthread_barrier_wait(&barrier);
