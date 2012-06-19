@@ -1,3 +1,10 @@
+marcd-0.7.7
+-----------
+
+	* [fix] handle SIGTERM (so it terminates properly)
+	* [fix] default database username
+	* [change] make arguments more consistent with DPMI
+
 marcd-0.7.6
 -----------
 
