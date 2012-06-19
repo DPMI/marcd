@@ -479,6 +479,7 @@ int main(int argc, char *argv[]){
 				exit(1);
 			}
 
+			close(sd);
 			listen_addr = ((sockaddr_in*)&ifr.ifr_addr)->sin_addr;
 		}
 		break;
