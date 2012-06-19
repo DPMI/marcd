@@ -548,10 +548,10 @@ int main(int argc, char *argv[]){
 	}
 
 	/* sanity checks */
+	show_env();
 	if ( !check_env() ){
 		return 1;
 	}
-	show_env();
 
 	if ( daemon_mode ){
 		if ( access(pidfile, R_OK) == 0 ){
