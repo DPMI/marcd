@@ -225,6 +225,15 @@ static void default_env(){
 	if ( group ){
 		drop_gid = group->gr_gid;
 	}
+
+	/* set database username to current user */
+	struct passwd* user = getpwuid(getuid());
+	if ( user ){
+		strncpy(db_username, user->pw_name, sizeof(db_username));
+		db_username[sizeof(db_username)-1] = '\0';
+	} else {
+		fprintf(stderr, "%s: failed to get current user\n", program_name);
+	}
 	if ( strcmp(program_name, "MArelayD") == 0 ){
 		have_relay_daemon = true;
 	} else {
