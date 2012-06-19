@@ -21,22 +21,22 @@ case "$1" in
 
         if [ ! -e /etc/marc/marcd.conf ]; then
             log_action_msg "No configuration present, create \`/etc/marc/marcd.conf' and try again!"
-						log_end_msg 1
+			log_end_msg 1
         elif start-stop-daemon --start --chdir /var/lib/marc --pidfile /var/lib/marc/marcd.pid --exec /usr/bin/MArCd -- \
             --pidfile /var/lib/marc/marcd.pid \
             --relay --syslog --daemon; then
-						log_end_msg 0
-				else
-						log_end_msg 1
-				fi
-				;;
-		
-		stop)
+			log_end_msg 0
+		else
+			log_end_msg 1
+		fi
+		;;
+
+	stop)
         log_daemon_msg "Stopping MA control daemon" "marcd"
         if start-stop-daemon --stop --signal INT --pidfile /var/lib/marc/marcd.pid; then
-						log_end_msg 0
-				else
-						log_end_msg 1
-				fi
-				;;
+			log_end_msg 0
+		else
+			log_end_msg 1
+		fi
+		;;
 esac
