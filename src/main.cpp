@@ -108,10 +108,10 @@ static struct option longopts[] = {
 
 	/* other */
 	{"config",    required_argument, 0, 'f'},
-	{"verbose",   no_argument, 0, 'v'},
-	{"quiet",     no_argument, 0, 'q'},
+	{"verbose",   no_argument,       0, 'v'},
+	{"quiet",     no_argument,       0, 'q'},
 	{"debug",     no_argument, &debug_flag, 1},
-	{"help",      no_argument, 0, 'h'},
+	{"help",      no_argument,       0, 'h'},
 
 	/* sentinel */
 	{0, 0, 0, 0}
