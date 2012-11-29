@@ -94,7 +94,7 @@ static struct option long_options[]= {
 	{"pidfile",    required_argument, 0, FLAG_PIDFILE},
 
 	/* database options */
-	{"dbhost",     required_argument, 0, 'h'},
+	{"dbhost",     required_argument, 0, 'H'},
 	{"database",   required_argument, 0, 'd'},
 	{"dbusername", required_argument, 0, 'u'},
 	{"dbpassword", required_argument, 0, 'p'},
@@ -110,7 +110,7 @@ static struct option long_options[]= {
 	{"verbose",   no_argument, &verbose_flag, 1},
 	{"quiet",     no_argument, &verbose_flag, 0},
 	{"debug",     no_argument, &debug_flag, 1},
-	{"help",      no_argument, 0, 'v'},
+	{"help",      no_argument, 0, 'h'},
 
 	/* sentinel */
 	{0, 0, 0, 0}
@@ -134,7 +134,7 @@ void show_usage(){
 #endif
 	       "\n"
 	       "Database options\n"
-	       "  -h, --dbhost        MySQL database host. [Default: localhost]\n"
+	       "  -H, --dbhost        MySQL database host. [Default: localhost]\n"
 	       "  -d  --database      Database name.\n"
 	       "  -u, --dbusername    Database username. [Default: current user]\n"
 	       "  -p, --dbpassword    Database password, use '-' to read password from\n"
@@ -152,7 +152,7 @@ void show_usage(){
 	       "      --debug         Show extra debugging output, including hexdump of\n"
 	       "                      all incomming and outgoing messages. Implies\n"
 	       "                      verbose output.\n"
-	       "      --help          This text\n");
+	       "  -h, --help          This text\n");
 }
 
 static int privilege_drop(){
@@ -384,7 +384,7 @@ int main(int argc, char *argv[]){
 
 	opterr=0;
 	optopt=0;
-	while ( (op = getopt_long(argc, argv, "d:r::i:h:u:p:f:", long_options, &option_index)) != -1 ){
+	while ( (op = getopt_long(argc, argv, "d:r::i:H:u:p:f:h", long_options, &option_index)) != -1 ){
 		switch (op){
 		case '?':
 		case 0: /* long opt */
@@ -414,7 +414,7 @@ int main(int argc, char *argv[]){
 			}
 			break;
 
-		case 'v':
+		case 'h': /* --help */
 			show_usage();
 			exit(0);
 			break;
@@ -425,7 +425,7 @@ int main(int argc, char *argv[]){
 #endif
 			break;
 
-		case 'h':
+		case 'H':
 			strncpy(db_hostname, optarg, sizeof(db_hostname));
 			db_hostname[sizeof(db_hostname)-1] = '\0';
 			break;
