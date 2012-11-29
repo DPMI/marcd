@@ -84,7 +84,7 @@ enum LongFlags {
 	FLAG_DAEMON
 };
 
-static const char* shortopts = "r::i:m:H:d:u:p:f:h";
+static const char* shortopts = "r::i:m:H:d:u:p:f:vqh";
 static struct option longopts[] = {
 	{"relay",      optional_argument, 0, 'r'},
 	{"iface",      required_argument, 0, 'i'},
@@ -108,8 +108,8 @@ static struct option longopts[] = {
 
 	/* other */
 	{"config",    required_argument, 0, 'f'},
-	{"verbose",   no_argument, &verbose_flag, 1},
-	{"quiet",     no_argument, &verbose_flag, 0},
+	{"verbose",   no_argument, 0, 'v'},
+	{"quiet",     no_argument, 0, 'q'},
 	{"debug",     no_argument, &debug_flag, 1},
 	{"help",      no_argument, 0, 'h'},
 
@@ -148,8 +148,8 @@ void show_usage(){
 	       "      --group GROUP   Change GID to this group. [default: marc]\n"
 	       "\n"
 	       "Other\n"
-	       "      --verbose       Verbose output.\n"
-	       "      --quiet         Inverse of --verbose.\n"
+	       "  -v, --verbose       Verbose output.\n"
+	       "  -q, --quiet         Inverse of --verbose.\n"
 	       "      --debug         Show extra debugging output, including hexdump of\n"
 	       "                      all incomming and outgoing messages. Implies\n"
 	       "                      verbose output.\n"
@@ -372,7 +372,6 @@ int main(int argc, char *argv[]){
 
 	default_env();
 
-	extern int opterr, optopt;
 	int ret;
 	int option_index = 0;
 	int op;
@@ -383,8 +382,6 @@ int main(int argc, char *argv[]){
 	}
 #endif
 
-	opterr=0;
-	optopt=0;
 	while ( (op = getopt_long(argc, argv, shortopts, longopts, &option_index)) != -1 ){
 		switch (op){
 		case '?':
@@ -498,6 +495,14 @@ int main(int argc, char *argv[]){
 
 		case FLAG_PIDFILE:
 			pidfile = optarg;
+			break;
+
+		case 'v': /* --verbose */
+			verbose_flag = 1;
+			break;
+
+		case 'q': /* --quiet */
+			verbose_flag = 0;
 			break;
 
 		default:
