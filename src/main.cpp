@@ -84,7 +84,8 @@ enum LongFlags {
 	FLAG_DAEMON
 };
 
-static struct option long_options[]= {
+static const char* shortopts = "d:r::i:H:u:p:f:h";
+static struct option longopts[] = {
 	{"relay",      optional_argument, 0, 'r'},
 	{"iface",      required_argument, 0, 'i'},
 	{"listen",     required_argument, 0, 'm'},
@@ -384,7 +385,7 @@ int main(int argc, char *argv[]){
 
 	opterr=0;
 	optopt=0;
-	while ( (op = getopt_long(argc, argv, "d:r::i:H:u:p:f:h", long_options, &option_index)) != -1 ){
+	while ( (op = getopt_long(argc, argv, shortopts, longopts, &option_index)) != -1 ){
 		switch (op){
 		case '?':
 		case 0: /* long opt */
@@ -501,7 +502,7 @@ int main(int argc, char *argv[]){
 
 		default:
 			if ( option_index >= 0 ){
-				fprintf(stderr, "flag --%s declared but not handled\n", long_options[option_index].name);
+				fprintf(stderr, "flag --%s declared but not handled\n", longopts[option_index].name);
 			} else {
 				fprintf(stderr, "flag -%c declared but not handled\n", op);
 			}
