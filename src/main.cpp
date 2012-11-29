@@ -84,7 +84,7 @@ enum LongFlags {
 	FLAG_DAEMON
 };
 
-static const char* shortopts = "d:r::i:H:u:p:f:h";
+static const char* shortopts = "r::i:m:H:d:u:p:f:h";
 static struct option longopts[] = {
 	{"relay",      optional_argument, 0, 'r'},
 	{"iface",      required_argument, 0, 'i'},
