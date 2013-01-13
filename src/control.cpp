@@ -76,10 +76,11 @@ int Control::run(){
 	/* wait for events */
 	while ( keep_running ){
 		MPMessage event;
-		struct sockaddr from;
+		struct sockaddr_in from;
+		socklen_t addrlen = sizeof(struct sockaddr_in);
 		struct timeval timeout = {1, 0}; /* 1 sec timeout */
 		size_t bytes;
-		switch ( (ret=marc_poll_event(marc, &event, &bytes, &from, &timeout)) ){
+		switch ( (ret=marc_poll_event(marc, &event, &bytes, (struct sockaddr*)&from, &addrlen, &timeout)) ){
 		case EAGAIN: /* delivered if using a timeout */
 		case EINTR:  /* interuped */
 			continue;
@@ -100,19 +101,19 @@ int Control::run(){
 
 		switch ( event.type ){
 		case MP_CONTROL_INIT_EVENT:
-			MP_Init(marc, &event.init, &from);
+			MP_Init(marc, &event.init, (struct sockaddr*)&from);
 			break;
 
 		case MP_STATUS_EVENT:
-			MP_Status(marc, &event.status, &from);
+			MP_Status(marc, &event.status, (struct sockaddr*)&from);
 			break;
 
 		case MP_STATUS2_EVENT:
-			MP_Status2(marc, &event.status2, &from);
+			MP_Status2(marc, &event.status2, (struct sockaddr*)&from);
 			break;
 
 		case MP_FILTER_REQUEST_EVENT:
-			MP_GetFilter(marc, &event.filter_id, &from);
+			MP_GetFilter(marc, &event.filter_id, (struct sockaddr*)&from);
 			break;
 
 		case MP_CONTROL_TERMINATE_EVENT:
@@ -121,7 +122,7 @@ int Control::run(){
 			break;
 
 		case MP_CONTROL_DISTRESS:
-			MP_Distress(marc, mampid_get(event.MAMPid), &from);
+			MP_Distress(marc, mampid_get(event.MAMPid), (struct sockaddr*)&from);
 			break;
 
 		default:
