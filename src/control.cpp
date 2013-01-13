@@ -317,6 +317,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
 	Log::verbose("MArCd", "MAMPid = %s (%zd) \n", MAMPid, strlen(MAMPid));
 	mampid_set(MPauth.MAMPid, MAMPid);
+	int is_authorized = strlen(MAMPid) > 0;
 
 	if ( debug_flag ){
 		char* repr = hexdump_str((const char*)&MPauth, sizeof(struct MPauth));
@@ -330,7 +331,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		return;
 	}
 
-	if( strlen(MAMPid) == 0){ // The MP exists, but isnt authorized.
+	if( !is_authorized ){ // The MP exists, but isnt authorized.
 		if ( !verbose_flag ){
 			Log::fatal("MArCd", "MPinitialization request from %s:%d -> not authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
 		} else {
