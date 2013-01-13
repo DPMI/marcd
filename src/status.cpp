@@ -59,12 +59,12 @@ static void update(const char* when, const char* MAMPid, int CI, long packets, l
 	};
 
 	char v1[22] = "U"; /* fits a 64-bit int */
-	if ( packets > 0 ){
+	if ( packets >= 0 ){
 		snprintf(v1, 22, "%ld", packets);
 	}
 
 	char v2[22] = "U"; /* fits a 64-bit int */
-	if ( matched > 0 ){
+	if ( matched >= 0 ){
 		snprintf(v2, 22, "%ld", matched);
 	}
 
