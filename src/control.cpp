@@ -45,6 +45,7 @@ static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr
 static void mp_set_status(const char* mampid, enum MPStatusEnum status);
 void MP_Status2_reset(const char* MAMPid, int noCI);
 void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from);
+void setup_rrd_tables(const char* mampid, unsigned int noCI);
 
 static int convMySQLtoFPI(struct filter* dst,  MYSQL_RES* src);
 
@@ -342,8 +343,10 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		Log::fatal("MArCd", "MPinitialization request from %s:%d -> authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
 	}
 
-	/* reset status counters */
-	MP_Status2_reset(MAMPid, ntohs(MPinit->noCI));
+	/* setup RRD tables as needed */
+	if ( is_authorized ){
+		setup_rrd_tables(mampid_get(MPauth.MAMPid), ntohs(MPinit->noCI));
+	}
 
 	/* register that the MP now is idle (doesn't really matter as heurestics is used for status, but it clears the distress state) */
 	mp_set_status(MAMPid, MP_STATUS_IDLE);

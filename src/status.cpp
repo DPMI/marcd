@@ -10,31 +10,53 @@
 #include <rrd.h>
 #endif
 
+#define RRD_HEARTBEAT "180"    /* can miss two updates */
+
 #include <cassert>
+#include <cerrno>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 extern char* rrdpath;
 
+static char* table_name(const char* mampid, int CI){
+	char* buf;
+	int ret;
+	if ( CI >= 0 ){
+		ret=asprintf(&buf, "%s/%s_CI%d.rrd", rrdpath, mampid, CI);
+	} else {
+		ret=asprintf(&buf, "%s/%s.rrd", rrdpath, mampid);
+	}
+	if ( ret == -1 ){
+		Log::fatal("status", "asprintf(..) returned -1: %s\n", strerror(errno));
+	}
+	return buf;
+}
+
+static const char* join_cmd(char* dst, int argc, char* argv[]){
+	char* ptr = dst;
+	ptr += sprintf(ptr, "rrdtool");
+	for ( int i = 0; i < argc; i++ ){
+		ptr += sprintf(ptr, " '%s'", argv[i]);
+	}
+	return dst;
+}
+
 #ifdef HAVE_RRDTOOL
-static void update(char* b1, char* b2, const char* when, const char* MAMPid, int CI, long packets, long matched){
-	assert(b1);
-	assert(b2);
+static void update(const char* when, const char* MAMPid, int CI, long packets, long matched){
 	assert(when);
 	assert(MAMPid);
 
 	static char cmd[] = "update";
 	static char separator[] = "--";
+	char* filename = table_name(MAMPid, CI);
+	char update[1024];
 	char* argv[] = {
 		cmd,
-		b1,
+		filename,
 		separator,
-		b2
+		update
 	};
-
-	if ( CI >= 0 ){
-		snprintf(b1, 1024, "%s/%s_CI%d.rrd", rrdpath, MAMPid, CI);
-	} else {
-		snprintf(b1, 1024, "%s/%s.rrd", rrdpath, MAMPid);
-	}
 
 	char v1[22] = "U"; /* fits a 64-bit int */
 	if ( packets > 0 ){
@@ -46,36 +68,30 @@ static void update(char* b1, char* b2, const char* when, const char* MAMPid, int
 		snprintf(v2, 22, "%ld", matched);
 	}
 
-	snprintf(b2, 1024, "%s:%s:%s", when, v1, v2);
+	snprintf(update, 1024, "%s:%s:%s", when, v1, v2);
 
-	unsigned int argc = 4;
 	char buffer[1024];
-	char* dst = buffer;
-	dst += sprintf(dst, "    Executing \"rrdtool");
-	for ( unsigned int i = 0; i < argc; i++ ){
-		dst += sprintf(dst, " %s", argv[i]);
-	}
-	Log::verbose("status", "%s\n", buffer);
+	unsigned int argc = sizeof(argv) / sizeof(char*);
+	Log::verbose("status", "    Executing \"%s\"\n", join_cmd(buffer, argc, argv));
 
 	rrd_clear_error();
 	if ( rrd_update(argc, argv) < 0 ){
 		Log::fatal("status", "    rrd_update() failed: %s\n", rrd_get_error());
 	}
+
+	free(filename);
 }
 #endif /* HAVE_RRDTOOL */
 
-void MP_Status2_reset(const char* MAMPid, int noCI){
+static void reset(const char* MAMPid, int noCI){
 #ifdef HAVE_RRDTOOL
-	char b1[1024];
-	char b2[1024];
-
 	Log::verbose("status", "Resetting RRD counters for %s\n", MAMPid);
-	update(b1, b2, "-1", MAMPid, -1, -1, -1);
-	update(b1, b2, "N", MAMPid, -1, 0, 0);
+	update("-1", MAMPid, -1, -1, -1);
+	update("N", MAMPid, -1, 0, 0);
 
 	for ( int i=0; i < noCI; i++ ){
-		update(b1, b2, "-1", MAMPid, i, -1, -1);
-		update(b1, b2, "N", MAMPid, i, 0, 0);
+		update("-1", MAMPid, i, -1, -1);
+		update("N", MAMPid, i, 0, 0);
 	}
 #endif /* HAVE_RRDTOOL */
 }
@@ -90,13 +106,54 @@ void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from){
 	             inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid);
 
 #ifdef HAVE_RRDTOOL
-	char b1[1024];
-	char b2[1024];
+	update("N", mampid, -1, ntohl(MPstat->packet_count), ntohl(MPstat->matched_count));
 
-	update(b1, b2, "N", mampid, -1, ntohl(MPstat->packet_count), ntohl(MPstat->matched_count));
-
-	for ( int i=0; i < MPstat->noCI; i++ ){
-		update(b1, b2, "N", mampid, i, ntohl(MPstat->CI[i].packet_count), ntohl(MPstat->CI[i].matched_count));
+	for (int i=0; i < MPstat->noCI; i++ ){
+		update("N", mampid, i, ntohl(MPstat->CI[i].packet_count), ntohl(MPstat->CI[i].matched_count));
 	}
 #endif /* HAVE_RRDTOOL */
+}
+
+static void create(const char* mampid, int CI){
+	char* filename = table_name(mampid, CI);
+	const char* argv[] = {
+		"create", filename,
+		"--step", "60",
+		"DS:total:COUNTER:180:0:U",
+		"DS:matched:COUNTER:180:0:U",
+		"RRA:AVERAGE:0.5:1:1440",      /* 1440 * 60s = 24h */
+		"RRA:AVERAGE:0.5:30:1440",     /* 1440 * 60s * 30 = 30 days */
+	};
+
+	struct stat st;
+	if ( stat(filename, &st) == 0 ){
+		return; /* file exists */
+	}
+	Log::verbose("status", "Creating RRD table `%s'.\n", filename);
+
+	char buffer[1024];
+	unsigned int argc = sizeof(argv) / sizeof(char*);
+	Log::verbose("status", "    Executing \"%s\"\n", join_cmd(buffer, argc, (char**)argv));
+
+	rrd_clear_error();
+	if ( rrd_create(argc, (char**)argv) < 0 ){
+		Log::fatal("status", "    rrd_create() failed: %s\n", rrd_get_error());
+	}
+
+	free(filename);
+}
+
+void setup_rrd_tables(const char* mampid, unsigned int noCI){
+#ifndef HAVE_RRDTOOL
+	return;
+#endif
+
+	/* create RRD tables as needed */
+	create(mampid, -1);
+	for ( unsigned int i = 0; i < noCI; i++ ){
+		create(mampid, i);
+	}
+
+	/* reset status counters */
+	reset(mampid, noCI);
 }
