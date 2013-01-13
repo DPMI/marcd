@@ -19,11 +19,11 @@
 
 extern char* rrdpath;
 
-static char* table_name(const char* mampid, int CI){
+static char* table_name(const char* mampid, int CI, const char* iface[]){
 	char* buf;
 	int ret;
 	if ( CI >= 0 ){
-		ret=asprintf(&buf, "%s/%s_CI%d.rrd", rrdpath, mampid, CI);
+		ret=asprintf(&buf, "%s/%s_%s.rrd", rrdpath, mampid, iface[CI]);
 	} else {
 		ret=asprintf(&buf, "%s/%s.rrd", rrdpath, mampid);
 	}
@@ -43,13 +43,13 @@ static const char* join_cmd(char* dst, int argc, char* argv[]){
 }
 
 #ifdef HAVE_RRDTOOL
-static void update(const char* when, const char* MAMPid, int CI, long packets, long matched){
+static void update(const char* when, const char* MAMPid, int CI, long packets, long matched, const char* iface[]){
 	assert(when);
 	assert(MAMPid);
 
 	static char cmd[] = "update";
 	static char separator[] = "--";
-	char* filename = table_name(MAMPid, CI);
+	char* filename = table_name(MAMPid, CI, iface);
 	char update[1024];
 	char* argv[] = {
 		cmd,
@@ -83,15 +83,15 @@ static void update(const char* when, const char* MAMPid, int CI, long packets, l
 }
 #endif /* HAVE_RRDTOOL */
 
-static void reset(const char* MAMPid, int noCI){
+static void reset(const char* MAMPid, int noCI, const char* iface[]){
 #ifdef HAVE_RRDTOOL
 	Log::verbose("status", "Resetting RRD counters for %s\n", MAMPid);
-	update("-1", MAMPid, -1, -1, -1);
-	update("N", MAMPid, -1, 0, 0);
+	update("-1", MAMPid, -1, -1, -1, iface);
+	update("N", MAMPid, -1, 0, 0, iface);
 
 	for ( int i=0; i < noCI; i++ ){
-		update("-1", MAMPid, i, -1, -1);
-		update("N", MAMPid, i, 0, 0);
+		update("-1", MAMPid, i, -1, -1, iface);
+		update("N", MAMPid, i, 0, 0, iface);
 	}
 #endif /* HAVE_RRDTOOL */
 }
@@ -106,16 +106,21 @@ void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from){
 	             inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid);
 
 #ifdef HAVE_RRDTOOL
-	update("N", mampid, -1, ntohl(MPstat->packet_count), ntohl(MPstat->matched_count));
+	const char* iface[MPstat->noCI];
+	for (int i=0; i < MPstat->noCI; i++ ){
+		iface[i] = MPstat->CI[i].iface;
+	}
+
+	update("N", mampid, -1, ntohl(MPstat->packet_count), ntohl(MPstat->matched_count), iface);
 
 	for (int i=0; i < MPstat->noCI; i++ ){
-		update("N", mampid, i, ntohl(MPstat->CI[i].packet_count), ntohl(MPstat->CI[i].matched_count));
+		update("N", mampid, i, ntohl(MPstat->CI[i].packet_count), ntohl(MPstat->CI[i].matched_count), iface);
 	}
 #endif /* HAVE_RRDTOOL */
 }
 
-static void create(const char* mampid, int CI){
-	char* filename = table_name(mampid, CI);
+static void create(const char* mampid, int CI, const char* iface[]){
+	char* filename = table_name(mampid, CI, iface);
 	const char* argv[] = {
 		"create", filename,
 		"--step", "60",
@@ -143,17 +148,17 @@ static void create(const char* mampid, int CI){
 	free(filename);
 }
 
-void setup_rrd_tables(const char* mampid, unsigned int noCI){
+void setup_rrd_tables(const char* mampid, unsigned int noCI, const char* iface[]){
 #ifndef HAVE_RRDTOOL
 	return;
 #endif
 
 	/* create RRD tables as needed */
-	create(mampid, -1);
+	create(mampid, -1, iface);
 	for ( unsigned int i = 0; i < noCI; i++ ){
-		create(mampid, i);
+		create(mampid, i, iface);
 	}
 
 	/* reset status counters */
-	reset(mampid, noCI);
+	reset(mampid, noCI, iface);
 }
