@@ -251,7 +251,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		return;
 	}
 
-	int id;
+	int id = -1;
 	char MAMPid[16] = {0,};
 
 	MYSQL_RES* result = mysql_store_result(&connection);
