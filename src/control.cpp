@@ -41,7 +41,6 @@ static marc_context_t marc;
 static void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
 static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from);
 static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from);
-static void MP_VerifyFilter(int sd, struct sockaddr from, char buffer[1500]);
 static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr* from);
 static void mp_set_status(const char* mampid, enum MPStatusEnum status);
 void MP_Status2_reset(const char* MAMPid, int noCI);
@@ -142,7 +141,7 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
 		return 0;
 	}
 
-	/* filter_id, ind, mode, CI_ID, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, consumer, DESTADDR, TYPE, CAPLEN */
+	/* filter_id, index, mode, CI, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, DESTADDR, TYPE, CAPLEN */
 
 	/* base fields */
 	rule->filter_id = atoi(row[0]);
@@ -174,8 +173,8 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
 	rule->dst_port_mask=atoi(row[20]);
 
 	/* destination */
-	const char* destination = row[22];
-	enum AddressType type = (enum AddressType)atoi(row[23]);
+	const char* destination = row[21];
+	enum AddressType type = (enum AddressType)atoi(row[22]);
 	stream_addr_aton(&rule->dest, destination, type, 0);
 
 	return 1;
@@ -248,10 +247,11 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		}
 	}
 
-	if ( !db_query("SELECT MAMPid FROM measurementpoints WHERE mac='%s' AND name='%s'", hexdump_address(&MPinit->hwaddr), MPinit->hostname) ){
+	if ( !db_query("SELECT `id`, `MAMPid` FROM `measurementpoints` WHERE mac='%s' AND name='%s'", hexdump_address(&MPinit->hwaddr), MPinit->hostname) ){
 		return;
 	}
 
+	int id = -1;
 	char MAMPid[16] = {0,};
 
 	MYSQL_RES* result = mysql_store_result(&connection);
@@ -278,7 +278,8 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		}
 	} else { /* known MP */
 		MYSQL_ROW row = mysql_fetch_row(result);
-		strncpy(MAMPid, row[0], 16);
+		id = atoi(row[0]);
+		strncpy(MAMPid, row[1], 16);
 		mysql_free_result(result);
 	}
 
@@ -357,7 +358,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 	mp_set_status(MAMPid, MP_STATUS_IDLE);
 
 	/* Lets check if we have any filters waiting for us? */
-	if ( !db_query("SELECT filter_id, ind, mode+0, CI_ID, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, consumer, DESTADDR, TYPE, CAPLEN FROM `%s_filterlist` ORDER BY `filter_id` ASC", MAMPid) ){
+	if ( !db_query("SELECT filter_id, `index`, mode+0, CI, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, destaddr, type, caplen FROM `filter` WHERE `mp` = %d ORDER BY `filter_id` ASC", id) ){
 		return;
 	}
 
@@ -403,7 +404,7 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
 		return;
 	}
 
-	if ( !db_query("SELECT  filter_id, ind, mode+0, CI_ID, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, consumer, DESTADDR, TYPE, CAPLEN  FROM %s_filterlist WHERE filter_id='%d' LIMIT 1",
+	if ( !db_query("SELECT filter_id, `index`, mode+0, CI, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, destaddr, type, caplen FROM filter WHERE mp = (SELECT id FROM measurementpoints WHERE MAMPid = '%s' LIMIT 1) filter_id='%d' LIMIT 1",
 	               mampid_get(filter->MAMPid), ntohl(filter->id)) ){
 		return;
 	}
@@ -419,43 +420,6 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
 		}
 	}
 	mysql_free_result(result);
-}
-
-static void __attribute__((unused)) MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
-	char statusQ[2000];
-	static char buf[200];
-	char *query;
-	query=statusQ;
-	bzero(statusQ,sizeof(statusQ));
-	struct MPVerifyFilter* MyVerify=(struct MPVerifyFilter*)buffer;
-	struct filter_packed* f = &MyVerify->filter;
-	if(MyVerify->flags==0) {
-		sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', comment='NOT PRESENT'", MyVerify->MAMPid,MyVerify->filter_id);
-	} else {
-#warning following format warnings is from unused code that is fubar anyway
-		sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', ind='%d', CI_ID='%s', VLAN_TCI='%d', VLAN_TCI_MASK='%d',ETH_TYPE='%d', ETH_TYPE_MASK='%d',ETH_SRC='%s',ETH_SRC_MASK='%s', ETH_DST='%s', ETH_DST_MASK='%s',IP_PROTO='%d', IP_SRC='%s', IP_SRC_MASK='%s', IP_DST='%s', IP_DST_MASK='%s', SRC_PORT='%d', SRC_PORT_MASK='%d', DST_PORT='%d', DST_PORT_MASK='%d', TYPE='%d', CAPLEN='%d', consumer='%d'",
-		        MyVerify->MAMPid, f->filter_id, f->index, f->iface, f->vlan_tci, f->vlan_tci_mask,
-		        f->eth_type,f->eth_type_mask,
-		        hexdump_address_r(&f->eth_src, &buf[0]), hexdump_address_r(&f->eth_src_mask, &buf[17]),
-		        hexdump_address_r(&f->eth_dst, &buf[34]), hexdump_address_r(&f->eth_dst_mask, &buf[51]),
-		        f->ip_proto,
-		        f->ip_src, f->ip_src_mask,
-		        f->ip_dst, f->ip_dst_mask,
-		        f->src_port,f->src_port_mask,f->dst_port,f->dst_port_mask,
-		        stream_addr_type(&f->dest),
-		        f->caplen,
-		        f->consumer);
-
-		sprintf(query, "%s, DESTADDR='%s' ", query, stream_addr_ntoa(&f->dest));
-	}
-
-	printf("MP_VerifyFilter():\n%s\n",query);
-	if ( mysql_query(&connection, query) != 0 ) {
-		Log::fatal("MArCd", "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(&connection), query);
-		return;
-	}
-
-	return;
 }
 
 static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr* from){
