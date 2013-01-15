@@ -41,7 +41,6 @@ static marc_context_t marc;
 static void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
 static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from);
 static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from);
-static void MP_VerifyFilter(int sd, struct sockaddr from, char buffer[1500]);
 static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr* from);
 static void mp_set_status(const char* mampid, enum MPStatusEnum status);
 void MP_Status2_reset(const char* MAMPid, int noCI);
@@ -421,43 +420,6 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
 		}
 	}
 	mysql_free_result(result);
-}
-
-static void __attribute__((unused)) MP_VerifyFilter(int sd, struct sockaddr from, char *buffer){
-	char statusQ[2000];
-	static char buf[200];
-	char *query;
-	query=statusQ;
-	bzero(statusQ,sizeof(statusQ));
-	struct MPVerifyFilter* MyVerify=(struct MPVerifyFilter*)buffer;
-	struct filter_packed* f = &MyVerify->filter;
-	if(MyVerify->flags==0) {
-		sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', comment='NOT PRESENT'", MyVerify->MAMPid,MyVerify->filter_id);
-	} else {
-#warning following format warnings is from unused code that is fubar anyway
-		sprintf(query,"INSERT INTO %s_filterlistverify SET filter_id='%d', ind='%d', CI_ID='%s', VLAN_TCI='%d', VLAN_TCI_MASK='%d',ETH_TYPE='%d', ETH_TYPE_MASK='%d',ETH_SRC='%s',ETH_SRC_MASK='%s', ETH_DST='%s', ETH_DST_MASK='%s',IP_PROTO='%d', IP_SRC='%s', IP_SRC_MASK='%s', IP_DST='%s', IP_DST_MASK='%s', SRC_PORT='%d', SRC_PORT_MASK='%d', DST_PORT='%d', DST_PORT_MASK='%d', TYPE='%d', CAPLEN='%d', consumer='%d'",
-		        MyVerify->MAMPid, f->filter_id, f->index, f->iface, f->vlan_tci, f->vlan_tci_mask,
-		        f->eth_type,f->eth_type_mask,
-		        hexdump_address_r(&f->eth_src, &buf[0]), hexdump_address_r(&f->eth_src_mask, &buf[17]),
-		        hexdump_address_r(&f->eth_dst, &buf[34]), hexdump_address_r(&f->eth_dst_mask, &buf[51]),
-		        f->ip_proto,
-		        f->ip_src, f->ip_src_mask,
-		        f->ip_dst, f->ip_dst_mask,
-		        f->src_port,f->src_port_mask,f->dst_port,f->dst_port_mask,
-		        stream_addr_type(&f->dest),
-		        f->caplen,
-		        f->consumer);
-
-		sprintf(query, "%s, DESTADDR='%s' ", query, stream_addr_ntoa(&f->dest));
-	}
-
-	printf("MP_VerifyFilter():\n%s\n",query);
-	if ( mysql_query(&connection, query) != 0 ) {
-		Log::fatal("MArCd", "Failed to execute mysql query: %s\nThe query was: %s\n", mysql_error(&connection), query);
-		return;
-	}
-
-	return;
 }
 
 static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr* from){
