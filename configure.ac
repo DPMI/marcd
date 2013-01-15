@@ -7,6 +7,16 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile dist/deb-control])
 
+# use -O2 by default
+AC_MSG_CHECKING([if CFLAGS is set])
+AS_IF([test -z "$CFLAGS"], [
+  AC_MSG_RESULT([no, defaulting to -O2])
+        CFLAGS="-O2"
+  CXXFLAGS="-O2"
+], [
+  AC_MSG_RESULT([yes ($CFLAGS)])
+])
+
 AC_PROG_CXX
 AC_PROG_RANLIB
 AC_GNU_SOURCE
