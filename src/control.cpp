@@ -142,7 +142,7 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
 		return 0;
 	}
 
-	/* filter_id, ind, mode, CI_ID, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, consumer, DESTADDR, TYPE, CAPLEN */
+	/* filter_id, index, mode, CI, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, DESTADDR, TYPE, CAPLEN */
 
 	/* base fields */
 	rule->filter_id = atoi(row[0]);
@@ -174,8 +174,8 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
 	rule->dst_port_mask=atoi(row[20]);
 
 	/* destination */
-	const char* destination = row[22];
-	enum AddressType type = (enum AddressType)atoi(row[23]);
+	const char* destination = row[21];
+	enum AddressType type = (enum AddressType)atoi(row[22]);
 	stream_addr_aton(&rule->dest, destination, type, 0);
 
 	return 1;
@@ -248,10 +248,11 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		}
 	}
 
-	if ( !db_query("SELECT MAMPid FROM measurementpoints WHERE mac='%s' AND name='%s'", hexdump_address(&MPinit->hwaddr), MPinit->hostname) ){
+	if ( !db_query("SELECT `id`, `MAMPid` FROM `measurementpoints` WHERE mac='%s' AND name='%s'", hexdump_address(&MPinit->hwaddr), MPinit->hostname) ){
 		return;
 	}
 
+	int id;
 	char MAMPid[16] = {0,};
 
 	MYSQL_RES* result = mysql_store_result(&connection);
@@ -278,7 +279,8 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		}
 	} else { /* known MP */
 		MYSQL_ROW row = mysql_fetch_row(result);
-		strncpy(MAMPid, row[0], 16);
+		id = atoi(row[0]);
+		strncpy(MAMPid, row[1], 16);
 		mysql_free_result(result);
 	}
 
@@ -357,7 +359,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 	mp_set_status(MAMPid, MP_STATUS_IDLE);
 
 	/* Lets check if we have any filters waiting for us? */
-	if ( !db_query("SELECT filter_id, ind, mode+0, CI_ID, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, consumer, DESTADDR, TYPE, CAPLEN FROM `%s_filterlist` ORDER BY `filter_id` ASC", MAMPid) ){
+	if ( !db_query("SELECT filter_id, `index`, mode+0, CI, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, destaddr, type, caplen FROM `filter` WHERE `mp` = %d ORDER BY `filter_id` ASC", id) ){
 		return;
 	}
 
@@ -403,7 +405,7 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
 		return;
 	}
 
-	if ( !db_query("SELECT  filter_id, ind, mode+0, CI_ID, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, consumer, DESTADDR, TYPE, CAPLEN  FROM %s_filterlist WHERE filter_id='%d' LIMIT 1",
+	if ( !db_query("SELECT filter_id, `index`, mode+0, CI, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, destaddr, type, caplen FROM filter WHERE mp = (SELECT id FROM measurementpoints WHERE MAMPid = '%s' LIMIT 1) filter_id='%d' LIMIT 1",
 	               mampid_get(filter->MAMPid), ntohl(filter->id)) ){
 		return;
 	}
