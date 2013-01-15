@@ -28,6 +28,7 @@ enum MPStatusEnum {
 	MP_STATUS_STOPPED,
 	MP_STATUS_DISTRESS,
 	MP_STATUS_TERMINATED,
+	MP_STATUS_TIMEOUT,
 };
 
 extern int verbose_flag;
