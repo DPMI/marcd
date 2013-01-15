@@ -22,13 +22,13 @@
 #include <signal.h>
 
 enum MPStatusEnum {
-	MP_STATUS_NOT_AUTH,
-	MP_STATUS_IDLE,
-	MP_STATUS_CAPTURE,
-	MP_STATUS_STOPPED,
-	MP_STATUS_DISTRESS,
-	MP_STATUS_TERMINATED,
-	MP_STATUS_TIMEOUT,
+	MP_STATUS_NOT_AUTH,        /* MP not yet authorized by MArCd */
+	MP_STATUS_IDLE,            /* Authorized, running but have no filter */
+	MP_STATUS_CAPTURE,         /* Authorized, running and have filters */
+	MP_STATUS_STOPPED,         /* Authorized but isn't running */
+	MP_STATUS_DISTRESS,        /* MP crashed (e.g. SIGSEGV) */
+	MP_STATUS_TERMINATED,      /* MP was terminated by remote */
+	MP_STATUS_TIMEOUT,         /* MP has not been heard from for a long period of time */
 };
 
 extern int verbose_flag;
