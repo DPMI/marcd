@@ -170,7 +170,7 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
 	rule->index = atoi(row[1]);
 	rule->mode = (FilterMode)atoi(row[2]);
 	rule->consumer = atoi(row[21]);
-	rule->caplen = atoi(row[24]);
+	rule->caplen = atoi(row[23]);
 
 	strncpy(rule->iface, row[3], 8);
 	rule->vlan_tci=atol(row[4]);
