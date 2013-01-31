@@ -67,7 +67,10 @@ int Control::init(){
 }
 
 int Control::cleanup(){
-	Log::verbose("MArCd", "Thread finished.\n");
+	/* mysql cleanup */
+	mysql_close(&connection);
+
+	Log::verbose("MArCd", "Control thread finished.\n");
 	return 0;
 }
 

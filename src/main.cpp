@@ -57,7 +57,6 @@ int ma_control_port = MA_CONTROL_DEFAULT_PORT;
 int ma_relay_port = MA_RELAY_DEFAULT_PORT;
 
 char* rrdpath;
-char* iface = NULL;
 in_addr listen_addr;
 in_addr control_addr;
 static int daemon_mode = 0;
@@ -84,19 +83,19 @@ enum LongFlags {
 	FLAG_DAEMON
 };
 
-static const char* shortopts = "r::i:m:H:d:u:p:f:vqh";
+static const char* shortopts = "r::i:l:sbH:N:u:p:f:vqdh";
 static struct option longopts[] = {
 	{"relay",      optional_argument, 0, 'r'},
 	{"iface",      required_argument, 0, 'i'},
-	{"listen",     required_argument, 0, 'm'},
+	{"listen",     required_argument, 0, 'l'},
 	{"datadir",    required_argument, 0, FLAG_DATADIR},
-	{"syslog",     no_argument,       &syslog_flag, 1},
-	{"daemon",     no_argument,       0, FLAG_DAEMON},
+	{"syslog",     no_argument,       0, 's'},
+	{"daemon",     no_argument,       0, 'b'},
 	{"pidfile",    required_argument, 0, FLAG_PIDFILE},
 
 	/* database options */
 	{"dbhost",     required_argument, 0, 'H'},
-	{"database",   required_argument, 0, 'd'},
+	{"database",   required_argument, 0, 'N'},
 	{"dbusername", required_argument, 0, 'u'},
 	{"dbpassword", required_argument, 0, 'p'},
 
@@ -110,7 +109,7 @@ static struct option longopts[] = {
 	{"config",    required_argument, 0, 'f'},
 	{"verbose",   no_argument,       0, 'v'},
 	{"quiet",     no_argument,       0, 'q'},
-	{"debug",     no_argument, &debug_flag, 1},
+	{"debug",     no_argument,       0, 'd'},
 	{"help",      no_argument,       0, 'h'},
 
 	/* sentinel */
@@ -124,11 +123,11 @@ void show_usage(){
 	printf("  -r, --relay[=PORT]  In addition to running MArCd, setup relaying so a\n"
 	       "                      separate MArelayD isn't needed.\n"
 	       "  -i, --iface=IFACE   Only listen on IFACE.\n"
-	       "  -m, --listen=IP     Only listen on IP.\n"
+	       "  -l, --listen=IP     Only listen on IP [default: 0.0.0.0].\n"
 	       "      --datadir=PATH  Use PATH as rrdtool data storage. [default: \n"
 	       "                      " DATA_DIR "]\n"
-	       "      --syslog        Write output to syslog instead of stderr.\n"
-	       "      --daemon        Fork to background.\n"
+	       "  -s, --syslog        Write output to syslog instead of stderr.\n"
+	       "  -b, --daemon        Fork to background.\n"
 	       "      --pidfile=FILE  When in daemon mode it stores the pid here\n"
 #ifdef HAVE_INIPARSER_H
 	       "  -f, --config=PATH   Load configuration from PATH [default: " MARCD_DEFAULT_CONFIG_FILE "]\n"
@@ -136,7 +135,7 @@ void show_usage(){
 	       "\n"
 	       "Database options\n"
 	       "  -H, --dbhost        MySQL database host. [Default: localhost]\n"
-	       "  -d  --database      Database name.\n"
+	       "  -N, --database      Database name.\n"
 	       "  -u, --dbusername    Database username. [Default: current user]\n"
 	       "  -p, --dbpassword    Database password, use '-' to read password from\n"
 	       "                      stdin. [Default: none]\n"
@@ -150,7 +149,7 @@ void show_usage(){
 	       "Other\n"
 	       "  -v, --verbose       Verbose output.\n"
 	       "  -q, --quiet         Inverse of --verbose.\n"
-	       "      --debug         Show extra debugging output, including hexdump of\n"
+	       "  -d, --debug         Show extra debugging output, including hexdump of\n"
 	       "                      all incomming and outgoing messages. Implies\n"
 	       "                      verbose output.\n"
 	       "  -h, --help          This text\n");
@@ -226,6 +225,15 @@ static void default_env(){
 	if ( group ){
 		drop_gid = group->gr_gid;
 	}
+
+	/* set database username to current user */
+	struct passwd* user = getpwuid(getuid());
+	if ( user ){
+		strncpy(db_username, user->pw_name, sizeof(db_username));
+		db_username[sizeof(db_username)-1] = '\0';
+	} else {
+		fprintf(stderr, "%s: failed to get current user\n", program_name);
+	}
 	if ( strcmp(program_name, "MArelayD") == 0 ){
 		have_relay_daemon = true;
 	} else {
@@ -258,16 +266,17 @@ static void show_env(){
 	if ( drop_priv_flag ){
 		Log::message(MAIN, "\tUser/Group: %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
 	}
+	Log::message(MAIN, "\tDatabase: mysql://%s@%s/%s\n", db_username, db_hostname, db_name);
 }
 
-static void sigint(int signum){
+static void handle_signal(int signum){
 	putc('\r', stderr);
 	if ( keep_running ){
-		Log::message(MAIN, "Caught termination signal, stopping threads.\n");
+		Log::message(MAIN, "Caught signal %d, stopping threads.\n", signum);
 		keep_running = false;
 		Daemon::interupt_all();
 	} else {
-		Log::fatal(MAIN, "Caught termination signal again, aborting.\n");
+		Log::fatal(MAIN, "Caught signal again, aborting.\n");
 		abort();
 	}
 }
@@ -384,12 +393,18 @@ int main(int argc, char *argv[]){
 
 	while ( (op = getopt_long(argc, argv, shortopts, longopts, &option_index)) != -1 ){
 		switch (op){
-		case '?':
+		case '?': /* error */
+			exit(1);
+
 		case 0: /* long opt */
 			break;
 
-		case FLAG_DAEMON: /* --daemon */
+		case 'b': /* --daemon */
 			daemon_mode = 1;
+			break;
+
+		case 's': /* --syslog */
+			syslog_flag = 1;
 			break;
 
 		case FLAG_USER: /* --user */
@@ -412,11 +427,6 @@ int main(int argc, char *argv[]){
 			}
 			break;
 
-		case 'h': /* --help */
-			show_usage();
-			exit(0);
-			break;
-
 		case 'f':
 #ifndef HAVE_INIPARSER_H
 			fprintf(stderr, "%s: configuration files not supported (build with --with-iniparser)\n", program_name);
@@ -428,7 +438,7 @@ int main(int argc, char *argv[]){
 			db_hostname[sizeof(db_hostname)-1] = '\0';
 			break;
 
-		case 'd':
+		case 'N':
 			strncpy(db_name, optarg, sizeof(db_name));
 			db_name[sizeof(db_name)-1] = '\0';
 			break;
@@ -469,10 +479,17 @@ int main(int argc, char *argv[]){
 				exit(1);
 			}
 
-			iface = optarg;
+			close(sd);
 			listen_addr = ((sockaddr_in*)&ifr.ifr_addr)->sin_addr;
 		}
 		break;
+
+		case 'l': /* --listen */
+			if ( inet_aton(optarg, &listen_addr) == 0 ){
+				Log::fatal(MAIN, "`%s' is not a valid IPv4 address\n", optarg);
+				exit(1);
+			}
+			break;
 
 		case 'r': /* --relay */
 			have_relay_daemon = true;
@@ -505,6 +522,14 @@ int main(int argc, char *argv[]){
 			verbose_flag = 0;
 			break;
 
+		case 'd': /* --debug */
+			debug_flag = 1;
+			break;
+
+		case 'h': /* --help */
+			show_usage();
+			exit(0);
+
 		default:
 			if ( option_index >= 0 ){
 				fprintf(stderr, "flag --%s declared but not handled\n", longopts[option_index].name);
@@ -534,10 +559,10 @@ int main(int argc, char *argv[]){
 	}
 
 	/* sanity checks */
+	show_env();
 	if ( !check_env() ){
 		return 1;
 	}
-	show_env();
 
 	if ( daemon_mode ){
 		if ( access(pidfile, R_OK) == 0 ){
@@ -589,7 +614,8 @@ int main(int argc, char *argv[]){
 	}
 
 	/* install signal handler */
-	signal(SIGINT, sigint);
+	signal(SIGINT, handle_signal);
+	signal(SIGTERM, handle_signal);
 
 	/* release all threads and wait for them to finish*/
 	pthread_barrier_wait(&barrier);
