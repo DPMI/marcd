@@ -1,4 +1,4 @@
-AC_INIT([MArCd],[0.7.7_git], [dsv@bth.se])
+AC_INIT([MArCd],[0.7.7git], [http://github.com/DPMI/marcd])
 
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([-Wall 1.11 foreign check-news])
