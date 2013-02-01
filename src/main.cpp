@@ -69,8 +69,8 @@ bool volatile keep_running = true;
 static int drop_priv_flag = 1;
 static const char* drop_username = "marc";
 static const char* drop_group = "marc";
-static uid_t drop_uid = -1;
-static gid_t drop_gid = -1;
+static uid_t drop_uid = 0;
+static gid_t drop_gid = 0;
 static bool have_control_daemon = false;
 static bool have_relay_daemon = false;
 
@@ -214,16 +214,45 @@ static void setup_output(){
 	Log::message(MAIN, "%s-"VERSION" (caputils-%s) starting.\n", program_name, caputils_version(NULL));
 }
 
+static const char* get_username(const uid_t id){
+	static char buf[128];
+	struct passwd* passwd = getpwuid(id);
+	if ( !passwd ){
+		return NULL;
+	}
+	strncpy(buf, passwd->pw_name, sizeof(buf));
+	return buf;
+}
+
+static const char* get_groupname(const gid_t id){
+	static char buf[128];
+	struct group* group = getgrgid(id);
+	if ( !group ){
+		return NULL;
+	}
+	strncpy(buf, group->gr_name, sizeof(buf));
+	return buf;
+}
+
 static void default_env(){
 	listen_addr.s_addr = htonl(INADDR_ANY);
 	rrdpath = strdup(DATA_DIR);
+
 	struct passwd* passwd = getpwnam(drop_username);
 	struct group* group = getgrnam(drop_group);
 	if ( passwd ){
 		drop_uid = passwd->pw_uid;
+	} else {
+		fprintf(stderr, "%s: no such user `%s': defaulting to current user\n", program_name, drop_username);
+		drop_uid = getuid();
+		drop_username = get_username(drop_uid);
 	}
 	if ( group ){
 		drop_gid = group->gr_gid;
+	} else {
+		fprintf(stderr, "%s: no such group `%s': defaulting to current primary group\n", program_name, drop_group);
+		drop_gid = getgid();
+		drop_group = get_groupname(drop_gid);
 	}
 
 	/* set database username to current user */
@@ -279,6 +308,26 @@ static void handle_signal(int signum){
 		Log::fatal(MAIN, "Caught signal again, aborting.\n");
 		abort();
 	}
+}
+
+static void set_username(const char* username){
+	const struct passwd* passwd = getpwnam(username);
+	if ( !passwd ){
+		Log::fatal(MAIN, "No such user `%s', aborting.\n", username);
+		abort();
+	}
+	drop_uid = passwd->pw_uid;
+	drop_username = username;
+}
+
+static void set_group(const char* groupname){
+	const struct group* group = getgrnam(groupname);
+	if ( !group ){
+		Log::fatal(MAIN, "No such group `%s', aborting.\n", groupname);
+		abort();
+	}
+	drop_gid = group->gr_gid;
+	drop_group = groupname;
 }
 
 #ifdef HAVE_INIPARSER_H
@@ -408,23 +457,11 @@ int main(int argc, char *argv[]){
 			break;
 
 		case FLAG_USER: /* --user */
-			drop_username = optarg;
-			{
-				struct passwd* passwd = getpwnam(drop_username);
-				if ( passwd ){
-					drop_uid = passwd->pw_uid;
-				}
-			}
+			set_username(optarg);
 			break;
 
 		case FLAG_GROUP: /* --group */
-			drop_group = optarg;
-			{
-				struct group* group = getgrnam(drop_group);
-				if ( group ){
-					drop_gid = group->gr_gid;
-				}
-			}
+			set_group(optarg);
 			break;
 
 		case 'f':
