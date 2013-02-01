@@ -331,6 +331,19 @@ static void set_group(const char* groupname){
 }
 
 #ifdef HAVE_INIPARSER_H
+static void set_config_param(char* dst, size_t bytes, dictionary* src, const char* key){
+	/* iniparser is not const correct and my strings is not writable */
+	static char buf[64];
+	snprintf(buf, sizeof(buf), "%s", key);
+
+	const char* value = iniparser_getstring(src, buf, NULL);
+	if ( !value ){
+		return;
+	}
+
+	snprintf(dst, bytes, "%s", value);
+}
+
 int load_config(int argc, char* argv[]){
 	char* filename = NULL;
 	dictionary* config = NULL;
@@ -386,34 +399,15 @@ int load_config(int argc, char* argv[]){
 	}
 	free(filename);
 
-	const char* value = NULL;
-
-	/* mysql hostname */
-	if ( (value=iniparser_getstring(config, "mysql:hostname", NULL)) ){
-		strncpy(db_hostname, value, sizeof(db_hostname));
-		db_hostname[sizeof(db_hostname)-1] = '\0';
-	}
-
-	/* mysql username */
-	if ( (value=iniparser_getstring(config, "mysql:username", NULL)) ){
-		strncpy(db_username, value, sizeof(db_username));
-		db_username[sizeof(db_username)-1] = '\0';
-	}
-
-	/* mysql password */
-	if ( (value=iniparser_getstring(config, "mysql:password", NULL)) ){
-		strncpy(db_password, value, sizeof(db_password));
-		db_password[sizeof(db_password)-1] = '\0';
-	}
-
-	/* mysql database */
-	if ( (value=iniparser_getstring(config, "mysql:database", NULL)) ){
-		strncpy(db_name, value, sizeof(db_name));
-		db_name[sizeof(db_name)-1] = '\0';
-	}
+	/* mysql config */
+	set_config_param(db_hostname, sizeof(db_hostname), config, "mysql:hostname");
+	set_config_param(db_username, sizeof(db_username), config, "mysql:username");
+	set_config_param(db_password, sizeof(db_password), config, "mysql:password");
+	set_config_param(db_name,     sizeof(db_name),     config, "mysql:database");
 
 	/* relay */
-	have_relay_daemon = iniparser_getboolean(config, "general:relay", 0);
+	char general_relay[] = "general:relay";
+	have_relay_daemon = iniparser_getboolean(config, general_relay, 0);
 
 	return 0;
 }
