@@ -28,7 +28,7 @@
 
 #include <caputils/marc.h>
 #include <caputils/log.h>
-#include <caputils/version.h>
+#include <caputils/utils.h>
 #define MAIN "main"
 
 #include <cstdio>
@@ -211,7 +211,7 @@ static void setup_output(){
 	} else {
 		Log::set_syslog_destination(severity);
 	}
-	Log::message(MAIN, "%s-"VERSION" (caputils-" CAPUTILS_VERSION ") starting.\n", program_name);
+	Log::message(MAIN, "%s-"VERSION" (caputils-%s) starting.\n", program_name, caputils_version(NULL));
 }
 
 static void default_env(){
