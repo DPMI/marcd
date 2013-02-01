@@ -163,11 +163,11 @@ static int privilege_drop(){
 
 	Log::message(MAIN, "Dropping privileges to %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
 	if ( setgid(drop_gid) != 0 ){
-		Log::error(MAIN, "\tsetgid() failed: %s\n", strerror(errno));
+		Log::error(MAIN, "  setgid() failed: %s\n", strerror(errno));
 		return 1;
 	}
 	if ( setuid(drop_uid) != 0 ){
-		Log::error(MAIN, "\tsetuid() failed: %s\n", strerror(errno));
+		Log::error(MAIN, "  setuid() failed: %s\n", strerror(errno));
 		return 1;
 	}
 
@@ -290,12 +290,12 @@ static int check_env(){
 
 static void show_env(){
 	Log::message(MAIN, "Environment:\n");
-	Log::message(MAIN, "\tDatadir: %s\n", rrdpath);
-	Log::message(MAIN, "\tPidfile: %s\n", pidfile);
+	Log::message(MAIN, "  Datadir: %s\n", rrdpath);
+	Log::message(MAIN, "  Pidfile: %s\n", pidfile);
 	if ( drop_priv_flag ){
-		Log::message(MAIN, "\tUser/Group: %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
+		Log::message(MAIN, "  User/Group: %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
 	}
-	Log::message(MAIN, "\tDatabase: mysql://%s@%s/%s\n", db_username, db_hostname, db_name);
+	Log::message(MAIN, "  Database: mysql://%s@%s/%s\n", db_username, db_hostname, db_name);
 }
 
 static void handle_signal(int signum){
