@@ -62,7 +62,7 @@ static const char* join_cmd(char* dst, int argc, char* argv[]){
 }
 
 #ifdef HAVE_RRDTOOL
-static void update(const char* when, const char* MAMPid, int CI, long packets, long matched, long dropped, const char* iface[]){
+static void update(const char* when, const char* MAMPid, int CI, long packets, long matched, long dropped, int BU, const char* iface[]){
 	assert(when);
 	assert(MAMPid);
 
@@ -92,7 +92,12 @@ static void update(const char* when, const char* MAMPid, int CI, long packets, l
 		snprintf(v3, sizeof(v3), "%ld", dropped);
 	}
 
-	snprintf(update, 1024, "%s:%s:%s:%s", when, v1, v2, v3);
+	char v4[16] = "U";
+	if ( BU >= 0 ){
+		snprintf(v4, sizeof(v4), "%.1f", (float)BU/10);
+	}
+
+	snprintf(update, 1024, "%s:%s:%s:%s:%s", when, v1, v2, v3, v4);
 
 	char buffer[1024];
 	unsigned int argc = sizeof(argv) / sizeof(char*);
@@ -110,12 +115,12 @@ static void update(const char* when, const char* MAMPid, int CI, long packets, l
 static void reset(const char* MAMPid, int noCI, const char* iface[]){
 #ifdef HAVE_RRDTOOL
 	Log::verbose("status", "Resetting RRD counters for %s\n", MAMPid);
-	update("-1", MAMPid, -1, -1, -1, -1, iface);
-	update("N", MAMPid, -1, 0, 0, 0, iface);
+	update("-1", MAMPid, -1, -1, -1, -1, -1, iface);
+	update("N", MAMPid, -1, 0, 0, 0, 0, iface);
 
 	for ( int i=0; i < noCI; i++ ){
-		update("-1", MAMPid, i, -1, -1, -1, iface);
-		update("N", MAMPid, i, 0, 0, 0, iface);
+		update("-1", MAMPid, i, -1, -1, -1, -1, iface);
+		update("N", MAMPid, i, 0, 0, 0, 0, iface);
 	}
 #endif /* HAVE_RRDTOOL */
 }
@@ -185,13 +190,14 @@ void MP_Status(marc_context_t marc, struct MPstatusExtended* MPstat, struct sock
 	       MPstat->packet_count,
 	       MPstat->matched_count,
 	       MPstat->dropped_count,
-	       iface);
+	       0, iface);
 
 	for (int i=0; i < MPstat->noCI; i++ ){
 		update("N", mampid, i,
 		       MPstat->CI[i].packet_count,
 		       MPstat->CI[i].matched_count,
 		       MPstat->CI[i].dropped_count,
+		       MPstat->CI[i].buffer_usage,
 		       iface);
 	}
 #endif /* HAVE_RRDTOOL */
@@ -205,8 +211,10 @@ static void create(const char* mampid, int CI, const char* iface[]){
 		"DS:total:COUNTER:180:0:U",
 		"DS:matched:COUNTER:180:0:U",
 		"DS:dropped:COUNTER:180:0:U",
-		"RRA:AVERAGE:0.5:1:1440",      /* 1440 * 60s = 24h */
-		"RRA:AVERAGE:0.5:30:1440",     /* 1440 * 60s * 30 = 30 days */
+		"DS:BU:GAUGE:180:0:100",
+		"RRA:AVERAGE:0.5:1:1440",    "RRA:MAX:0.5:1:1440",     /* 1 min resolution,  1440 points * 60s = 24h */
+		"RRA:AVERAGE:0.5:60:1440",   "RRA:MAX:0.5:60:1440",    /* 1 hour resolution, 1440 points * 60s * 60 samples per point = 60 days */
+		"RRA:AVERAGE:0.5:1440:720",  "RRA:MAX:0.5:1440:720",   /* 24 hour resolution, 720 points * 60s * 1440 samples per point = 5 years */
 	};
 
 	struct stat st;
