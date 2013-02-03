@@ -21,6 +21,7 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
+#include "database.hpp"
 #include "log.hpp"
 #include <caputils/marc.h>
 #include <caputils/log.h>
@@ -179,6 +180,12 @@ void MP_Status(marc_context_t marc, struct MPstatusExtended* MPstat, struct sock
 
 	Log::verbose("status", "Extended status from %s:%d (MAMPid: %s)\n",
 	             inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid);
+
+	/* bump timestamp */ {
+		char buf[16*2+1]; /* mampids are 16 bytes, worst-case escape requires n*2 chars + nullterminator */
+		mysql_real_escape_string(&connection, buf, mampid_get(MPstat->MAMPid), strlen(MPstat->MAMPid));
+		db_query("UPDATE measurementpoints SET time = CURRENT_TIMESTAMP, status = %d WHERE MAMPid = '%s'", MPstat->noFilters > 0 ? 2 : 1, buf);
+	}
 
 #ifdef HAVE_RRDTOOL
 	const char* iface[MPstat->noCI];
