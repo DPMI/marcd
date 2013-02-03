@@ -58,12 +58,13 @@ extern int ma_control_port;
 static marc_context_t marc;
 
 static void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
-static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from);
 static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from);
 static void MP_Distress(marc_context_t marc, const char* mampid, struct sockaddr* from);
 static void mp_set_status(const char* mampid, enum MPStatusEnum status);
-void MP_Status2_reset(const char* MAMPid, int noCI);
-void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from);
+struct MPstatusExtended* unpack_status_legacy(const struct MPstatusLegacyExt* old);
+struct MPstatusExtended* unpack_status(struct MPstatusExtended* s);
+void MP_Status_reset(const char* MAMPid, int noCI);
+void MP_Status(marc_context_t marc, MPstatusExtended* MPstat, struct sockaddr* from);
 void setup_rrd_tables(const char* mampid, unsigned int noCI, const char* iface[]);
 
 static int convMySQLtoFPI(struct filter* dst,  MYSQL_RES* src);
@@ -128,11 +129,15 @@ int Control::run(){
 			break;
 
 		case MP_STATUS_EVENT:
-			MP_Status(marc, &event.status, (struct sockaddr*)&from);
+			Log::message("MArCd", "Received legacy status report, ignored. Please upgrade to a later MP version.\n");
 			break;
 
-		case MP_STATUS2_EVENT:
-			MP_Status2(marc, &event.status2, (struct sockaddr*)&from);
+		case MP_STATUS2_OLD_EVENT:
+			MP_Status(marc, unpack_status_legacy(&event.legacy_ext_status), (struct sockaddr*)&from);
+			break;
+
+		case MP_STATUS3_EVENT:
+			MP_Status(marc, unpack_status(&event.status), (struct sockaddr*)&from);
 			break;
 
 		case MP_FILTER_REQUEST_EVENT:
@@ -398,24 +403,6 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
 	Log::verbose("MArCd", "MP_init done.\n");
 	return;
-}
-
-static void MP_Status(marc_context_t marc, MPstatus* MPstat, struct sockaddr* from){
-	LOG_EVENT("MPstatus", mampid_get(MPstat->MAMPid));
-
-	if ( MPstat->MAMPid[0] == 0 ){
-		Log::fatal("MArCd", "MPstat with invalid MAMPid (null)\n");
-		return;
-	}
-
-	/* bump timestamp */ {
-		char buf[16*2+1]; /* mampids are 16 bytes, worst-case escape requires n*2 chars + nullterminator */
-		mysql_real_escape_string(&connection, buf, mampid_get(MPstat->MAMPid), strlen(MPstat->MAMPid));
-		db_query("UPDATE measurementpoints SET time = CURRENT_TIMESTAMP WHERE MAMPid = '%s'", buf);
-	}
-
-	db_query("INSERT INTO %s_CIload SET noFilters='%d', matchedPkts='%d' %s",
-	         mampid_get(MPstat->MAMPid), ntohl(MPstat->noFilters), ntohl(MPstat->matched), MPstat->CIstats);
 }
 
 static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockaddr* from){

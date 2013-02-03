@@ -21,6 +21,7 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
+#include "database.hpp"
 #include "log.hpp"
 #include <caputils/marc.h>
 #include <caputils/log.h>
@@ -62,7 +63,7 @@ static const char* join_cmd(char* dst, int argc, char* argv[]){
 }
 
 #ifdef HAVE_RRDTOOL
-static void update(const char* when, const char* MAMPid, int CI, long packets, long matched, const char* iface[]){
+static void update(const char* when, const char* MAMPid, int CI, long packets, long matched, long dropped, int BU, const char* iface[]){
 	assert(when);
 	assert(MAMPid);
 
@@ -87,7 +88,17 @@ static void update(const char* when, const char* MAMPid, int CI, long packets, l
 		snprintf(v2, 22, "%ld", matched);
 	}
 
-	snprintf(update, 1024, "%s:%s:%s", when, v1, v2);
+	char v3[22] = "U"; /* fits a 64-bit int */
+	if ( dropped >= 0 ){
+		snprintf(v3, sizeof(v3), "%ld", dropped);
+	}
+
+	char v4[16] = "U";
+	if ( BU >= 0 ){
+		snprintf(v4, sizeof(v4), "%.1f", (float)BU/10);
+	}
+
+	snprintf(update, 1024, "%s:%s:%s:%s:%s", when, v1, v2, v3, v4);
 
 	char buffer[1024];
 	unsigned int argc = sizeof(argv) / sizeof(char*);
@@ -105,17 +116,63 @@ static void update(const char* when, const char* MAMPid, int CI, long packets, l
 static void reset(const char* MAMPid, int noCI, const char* iface[]){
 #ifdef HAVE_RRDTOOL
 	Log::verbose("status", "Resetting RRD counters for %s\n", MAMPid);
-	update("-1", MAMPid, -1, -1, -1, iface);
-	update("N", MAMPid, -1, 0, 0, iface);
+	update("-1", MAMPid, -1, -1, -1, -1, -1, iface);
+	update("N", MAMPid, -1, 0, 0, 0, 0, iface);
 
 	for ( int i=0; i < noCI; i++ ){
-		update("-1", MAMPid, i, -1, -1, iface);
-		update("N", MAMPid, i, 0, 0, iface);
+		update("-1", MAMPid, i, -1, -1, -1, -1, iface);
+		update("N", MAMPid, i, 0, 0, 0, 0, iface);
 	}
 #endif /* HAVE_RRDTOOL */
 }
 
-void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from){
+struct MPstatusExtended* unpack_status_legacy(const struct MPstatusLegacyExt* old){
+	static struct MPstatusExtended* s = NULL;
+	static unsigned int noCI = 0;
+
+	/* reallocate as needed */
+	if ( !s || old->noCI > noCI ){
+		noCI = old->noCI;
+		s = (struct MPstatusExtended*)realloc(s, sizeof(struct MPstatusExtended) + sizeof(struct CIstats) * noCI);
+	}
+
+	s->type = old->type;
+	memcpy(s->MAMPid, old->MAMPid, 8);
+	s->version = 0;
+	s->packet_count = ntohl(old->packet_count);
+	s->matched_count = ntohl(old->matched_count);
+	s->dropped_count = 0;
+	s->status = old->status;
+	s->noFilters = old->noFilters;
+	s->noCI = old->noCI;
+
+	for ( int i = 0; i < old->noCI; i++ ){
+		memcpy(s->CI[i].iface, old->CI[i].iface, 8);
+		s->CI[i].packet_count = ntohl(old->CI[i].packet_count);
+		s->CI[i].matched_count = ntohl(old->CI[i].matched_count);
+		s->CI[i].dropped_count = 0;
+		s->CI[i].buffer_usage = ntohl(old->CI[i].buffer_usage);
+	}
+
+	return s;
+}
+
+struct MPstatusExtended* unpack_status(struct MPstatusExtended* s){
+	s->packet_count = ntohl(s->packet_count);
+	s->matched_count = ntohl(s->matched_count);
+	s->dropped_count = ntohl(s->dropped_count);
+
+	for ( int i = 0; i < s->noCI; i++ ){
+		s->CI[i].packet_count = ntohl(s->CI[i].packet_count);
+		s->CI[i].matched_count = ntohl(s->CI[i].matched_count);
+		s->CI[i].dropped_count = ntohl(s->CI[i].dropped_count);
+		s->CI[i].buffer_usage = ntohl(s->CI[i].buffer_usage);
+	}
+
+	return s;
+}
+
+void MP_Status(marc_context_t marc, struct MPstatusExtended* MPstat, struct sockaddr* from){
 	assert(MPstat);
 	assert(from);
 
@@ -124,16 +181,31 @@ void MP_Status2(marc_context_t marc, MPstatus2* MPstat, struct sockaddr* from){
 	Log::verbose("status", "Extended status from %s:%d (MAMPid: %s)\n",
 	             inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid);
 
+	/* bump timestamp */ {
+		char buf[16*2+1]; /* mampids are 16 bytes, worst-case escape requires n*2 chars + nullterminator */
+		mysql_real_escape_string(&connection, buf, mampid_get(MPstat->MAMPid), strlen(MPstat->MAMPid));
+		db_query("UPDATE measurementpoints SET time = CURRENT_TIMESTAMP, status = %d WHERE MAMPid = '%s'", MPstat->noFilters > 0 ? 2 : 1, buf);
+	}
+
 #ifdef HAVE_RRDTOOL
 	const char* iface[MPstat->noCI];
 	for (int i=0; i < MPstat->noCI; i++ ){
 		iface[i] = MPstat->CI[i].iface;
 	}
 
-	update("N", mampid, -1, ntohl(MPstat->packet_count), ntohl(MPstat->matched_count), iface);
+	update("N", mampid, -1,
+	       MPstat->packet_count,
+	       MPstat->matched_count,
+	       MPstat->dropped_count,
+	       0, iface);
 
 	for (int i=0; i < MPstat->noCI; i++ ){
-		update("N", mampid, i, ntohl(MPstat->CI[i].packet_count), ntohl(MPstat->CI[i].matched_count), iface);
+		update("N", mampid, i,
+		       MPstat->CI[i].packet_count,
+		       MPstat->CI[i].matched_count,
+		       MPstat->CI[i].dropped_count,
+		       MPstat->CI[i].buffer_usage,
+		       iface);
 	}
 #endif /* HAVE_RRDTOOL */
 }
@@ -145,8 +217,11 @@ static void create(const char* mampid, int CI, const char* iface[]){
 		"--step", "60",
 		"DS:total:COUNTER:180:0:U",
 		"DS:matched:COUNTER:180:0:U",
-		"RRA:AVERAGE:0.5:1:1440",      /* 1440 * 60s = 24h */
-		"RRA:AVERAGE:0.5:30:1440",     /* 1440 * 60s * 30 = 30 days */
+		"DS:dropped:COUNTER:180:0:U",
+		"DS:BU:GAUGE:180:0:100",
+		"RRA:AVERAGE:0.5:1:1440",    "RRA:MAX:0.5:1:1440",     /* 1 min resolution,  1440 points * 60s = 24h */
+		"RRA:AVERAGE:0.5:60:1440",   "RRA:MAX:0.5:60:1440",    /* 1 hour resolution, 1440 points * 60s * 60 samples per point = 60 days */
+		"RRA:AVERAGE:0.5:1440:720",  "RRA:MAX:0.5:1440:720",   /* 24 hour resolution, 720 points * 60s * 1440 samples per point = 5 years */
 	};
 
 	struct stat st;
