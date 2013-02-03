@@ -1,4 +1,14 @@
-AC_INIT([MArCd],[0.7.7git], [http://github.com/DPMI/marcd])
+m4_define([__VERSION_MAJOR__], [0])
+m4_define([__VERSION_MINOR__], [7])
+m4_define([__VERSION_MICRO__], [7])
+m4_define([__VERSION_SUFFIX__], [-git])
+
+AC_INIT([MArCd],m4_defn([__VERSION_MAJOR__]).m4_defn([__VERSION_MINOR__]).m4_defn([__VERSION_MICRO__])m4_defn([__VERSION_SUFFIX__]), [http://github.com/DPMI/marcd])
+
+VERSION_MAJOR=__VERSION_MAJOR__
+VERSION_MINOR=__VERSION_MINOR__
+VERSION_MICRO=__VERSION_MICRO__
+VERSION_SUFFIX=__VERSION_SUFFIX__
 
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([-Wall 1.11 foreign check-news])
@@ -28,6 +38,9 @@ AC_ARG_PROGRAM
 
 AC_ARG_ENABLE([daemon], [AS_HELP_STRING([--enable-daemon], [Build MArCd @<:@default=enabled@:>@])])
 AC_ARG_ENABLE([relay],  [AS_HELP_STRING([--enable-relay],  [Build MArelayD @<:@default=enabled@:>@])])
+echo $VERSION_SUFFIX
+AM_CONDITIONAL([HAVE_VCS],        [test "x$VERSION_SUFFIX" = "x-git"])
+AS_IF([test "x$VERSION_SUFFIX" = "x-git"], [AC_DEFINE([HAVE_VCS], [1], [Define to 1 if VCS is present])])
 
 pkgdatadir="${localstatedir}/marc"
 pkgconfdir="${sysconfdir}/marc"

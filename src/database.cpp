@@ -23,6 +23,8 @@
 
 #include "database.hpp"
 #include "log.hpp"
+#include "vcs.h"
+#include <caputils/version.h>
 #include <cstdarg>
 #include <cstdlib>
 
@@ -53,6 +55,17 @@ int db_connect(){
 	  return 0;
   }
   mysql_free_result(result);
+
+  const char* vcs =
+  #ifdef HAVE_VCS
+	  VCS_REV "/" VCS_BRANCH;
+	#else
+  "";
+	#endif
+
+  db_query("REPLACE `meta` (`key`, `value`) VALUES ('marcd_version', '%s')", VERSION);
+  db_query("REPLACE `meta` (`key`, `value`) VALUES ('marcd_vcs', '%s')", vcs);
+  db_query("REPLACE `meta` (`key`, `value`) VALUES ('marcd_caputils', '%s')", caputils_version(NULL));
 
   return 1;
 }

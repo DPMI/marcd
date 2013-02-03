@@ -29,6 +29,7 @@
 #include <caputils/marc.h>
 #include <caputils/log.h>
 #include <caputils/utils.h>
+#include <caputils/version.h>
 #define MAIN "main"
 
 #include <cstdio>

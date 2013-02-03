@@ -33,6 +33,25 @@ MArelayD_CXXFLAGS = -Wall -DBUILD_RELAY ${libcap_marc_CFLAGS}
 MArelayD_LDADD = ${libcap_marc_LIBS} ${libcap_filter_LIBS}
 MArelayD_SOURCES = src/relay.cpp src/log.cpp src/log.hpp
 
+BUILT_SOURCES = vcs.h
+CLEANFILES = vcs.h
+if HAVE_VCS
+.PHONY: .vcs
+BUILT_SOURCES += .vcs vcs.h stamp-vcs
+CLEANFILES += .vcs stamp-vcs
+.vcs: Makefile
+	@git rev-parse --short HEAD | sed 's/\(.*\)/#define VCS_REV "\1"/' > .vcs
+	@git rev-parse --abbrev-ref HEAD | sed 's/\(.*\)/#define VCS_BRANCH "\1"/' >> .vcs
+	@cmp -s vcs.h .vcs || touch stamp-vcs
+stamp-vcs: .vcs
+vcs.h: stamp-vcs
+	$(AM_V_GEN)cp .vcs vcs.h
+else
+vcs.h: Makefile
+	@echo -n > vcs.h
+endif
+MArCd_SOURCES += vcs.h
+
 install-exec-hook:
 	install -d ${DESTDIR}${pkgdatadir}
 
