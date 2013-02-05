@@ -60,16 +60,27 @@ debversion=`echo $(version) | sed 's/_//'`
 debpkgname=marcd_${debversion}_@ARCH@
 
 deb: all
+	@test "x"`id -u` = "x0" || (echo "Must be root when executing \"make deb\" to set proper permissions"; exit 1)
 	@test "x${prefix}" = "x/usr" || (echo "Error: --prefix must be /usr when creating debian release (currently ${prefix})"; exit 1)
 	@test "x${sysconfdir}" = "x/etc" || (echo "Error: --sysconfdir must be /etc when creating debian release (currently ${sysconfdir})"; exit 1)
 	@test "x${localstatedir}" = "x/var/lib" || (echo "Error: --localstatedir must be /var/lib when creating debian release (currently ${localstatedir})"; exit 1)
+	rm -rf $(debpkgname)
 
 	mkdir -p $(debpkgname)/DEBIAN
 	mkdir -p $(debpkgname)/$(pkgdatadir) && chmod 0755 $(debpkgname)/$(pkgdatadir)
 	mkdir -p $(debpkgname)/$(pkgconfdir) && chmod 0755 $(debpkgname)/$(pkgconfdir)
+	mkdir -p $(debpkgname)/etc/default && chmod 0755 $(debpkgname)/etc/default
+	mkdir -p $(debpkgname)/etc/init.d  && chmod 0755 $(debpkgname)/etc/init.d
 	cp dist/deb-control $(debpkgname)/DEBIAN/control
-	cp $(top_srcdir)/dist/debian-init $(debpkgname)/DEBIAN/marcd.init
 	$(MAKE) install DESTDIR=`pwd`/$(debpkgname)
+	install -m 0755 -o root -g root ${top_srcdir}/dist/deb-postinst ${debpkgname}/DEBIAN/postinst
+	install -m 0755 -o root -g root ${top_srcdir}/dist/deb-postrm ${debpkgname}/DEBIAN/postrm
+	install -m 0755 -o root -g root $(top_srcdir)/dist/debian-conf $(debpkgname)/etc/default/marcd
+	install -m 0755 -o root -g root $(top_srcdir)/dist/debian-init $(debpkgname)/etc/init.d/marcd
+	echo "/etc/default/marcd" > $(debpkgname)/DEBIAN/conffiles
+	chmod 0755 $(debpkgname)/usr/bin/MArCd
+	chmod 0755 $(debpkgname)/usr/bin/MArelayD
 	strip $(debpkgname)/usr/bin/MArCd
 	strip $(debpkgname)/usr/bin/MArelayD
+	(cd $(debpkgname); find . -type f ! -regex '.*.hg.*' ! -regex '.*?debian-binary.*' ! -regex '.*?DEBIAN.*' -printf '%P ' | xargs md5sum > DEBIAN/md5sums)
 	dpkg-deb --build $(debpkgname)
