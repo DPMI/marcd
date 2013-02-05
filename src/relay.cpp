@@ -170,8 +170,8 @@ int Relay::run(){
 		/* print received message */
 		counter++;
 		Log::fatal("relay",  " [%d]  MArC request from %s:%d.\n", counter, inet_ntoa(from.sin_addr), ntohs(from.sin_port));
-		Log::verbose("relay", "         MP Listens to (UDP) %s:%d\n", msg.address, ntohs(msg.port));
-		Log::verbose("relay", "         MArC: %s (%d/%d) database %s %s/%s\n", inet_ntoa(listen_addr), ma_relay_port, ma_control_port, db_name, db_username, strlen(db_password) > 0 ? db_password : "#NO#");
+		Log::verbose("relay", "         MP Listens to (UDP) %.16s:%d\n", msg.address, ntohs(msg.port));
+		Log::verbose("relay", "         MArC: %.16s (%d/%d) database %s %s/%s\n", self.address, ma_relay_port, ma_control_port, db_name, db_username, strlen(db_password) > 0 ? db_password : "#NO#");
 
 		if ( debug_flag ){
 			char* repr = hexdump_str((const char*)&self, sizeof(struct MAINFO));
