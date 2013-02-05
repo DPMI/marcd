@@ -95,8 +95,9 @@ int Relay::init(){
 	}
 
 	int on = 1;
-	setsockopt(sd,SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
-	setsockopt(sd,SOL_SOCKET, SO_BROADCAST, &on, sizeof(int));
+	setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
+	setsockopt(sd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(int));
+	setsockopt(sd, IPPROTO_IP, IP_PKTINFO,   &on, sizeof(int));
 
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
@@ -142,18 +143,36 @@ static void print_message(const MAINFO* self, const MAINFO* peer, const sockaddr
 static void process_message(int sd, MAINFO* self){
 	MAINFO msg = {0, };
 
-	/* receive message */
+	char cmbuf[0x100];
+	struct iovec iov = {&msg, sizeof(MAINFO)};
 	struct sockaddr_in from;
-	socklen_t addrlen = sizeof(struct sockaddr_in);
-	ssize_t bytes = recvfrom(sd, &msg, sizeof(MAINFO), 0, (struct sockaddr *)&from, &addrlen);
+	struct msghdr msghdr = {
+		.msg_name = &from,
+		.msg_namelen = sizeof(from),
+		.msg_iov = &iov,
+		.msg_iovlen = 1,
+		.msg_control = cmbuf,
+		.msg_controllen = sizeof(cmbuf),
+	};
 
+	ssize_t bytes = recvmsg(sd, &msghdr, 0);
 	if ( bytes < 0 ){
-		Log::fatal("relay", "recvfrom() returned %d: %s\n", errno, strerror(errno));
+		Log::fatal("relay", "recvmsg() returned %d: %s\n", errno, strerror(errno));
 		return;
 	}
 
-	print_message(self, &msg, &from);
+	/* find destination address */
+	if ( control_addr.s_addr == INADDR_ANY ){
+		for ( struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msghdr); cmsg != NULL; cmsg = CMSG_NXTHDR(&msghdr, cmsg) ){
+			if ( cmsg->cmsg_level != IPPROTO_IP || cmsg->cmsg_type != IP_PKTINFO ) continue;
+			struct in_pktinfo* pi = (struct in_pktinfo*)CMSG_DATA(cmsg);
+			strncpy(self->address, inet_ntoa(pi->ipi_spec_dst), 16);
+			break;
+		}
+	}
 
+	/* reply */
+	print_message(self, &msg, &from);
 	bytes = sendto(sd, self, sizeof(struct MAINFO), 0, (struct sockaddr*)&from, sizeof(struct sockaddr_in));
 	if( bytes < 0 ) {
 		Log::fatal("relay", "sendto() returned %d: %s\n", errno, strerror(errno));
