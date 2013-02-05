@@ -38,7 +38,6 @@ AC_ARG_PROGRAM
 
 AC_ARG_ENABLE([daemon], [AS_HELP_STRING([--enable-daemon], [Build MArCd @<:@default=enabled@:>@])])
 AC_ARG_ENABLE([relay],  [AS_HELP_STRING([--enable-relay],  [Build MArelayD @<:@default=enabled@:>@])])
-echo $VERSION_SUFFIX
 AM_CONDITIONAL([HAVE_VCS],        [test "x$VERSION_SUFFIX" = "x-git"])
 AS_IF([test "x$VERSION_SUFFIX" = "x-git"], [AC_DEFINE([HAVE_VCS], [1], [Define to 1 if VCS is present])])
 
