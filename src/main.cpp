@@ -123,7 +123,7 @@ void show_usage(){
 	printf("Usage: %s [OPTIONS] DATABASE\n", program_name);
 	printf("  -r, --relay[=PORT]  In addition to running MArCd, setup relaying so a\n"
 	       "                      separate MArelayD isn't needed.\n"
-	       "  -i, --iface=IFACE   Only listen on IFACE.\n"
+	       "  -i, --iface=IFACE   Only listen on IFACE [default: any].\n"
 	       "  -l, --listen=IP     Only listen on IP [default: 0.0.0.0].\n"
 	       "      --datadir=PATH  Use PATH as rrdtool data storage. [default: \n"
 	       "                      " DATA_DIR "]\n"
@@ -332,6 +332,12 @@ static void set_group(const char* groupname){
 }
 
 static void listen_from_iface(const char* iface){
+	/* special handing of "any" interface */
+	if ( strcmp(iface, "any") == 0 ){
+		listen_addr.s_addr = INADDR_ANY;
+		return;
+	}
+
 	/* check if iface exists */
 	struct ifreq ifr;
 	strncpy(ifr.ifr_name, iface, IFNAMSIZ);
