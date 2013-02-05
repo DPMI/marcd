@@ -131,12 +131,38 @@ static void print_message(const MAINFO* self, const MAINFO* peer, const sockaddr
 	static int n = 0;
 	Log::fatal("relay",   "[%d] MArC request from %s:%d.\n", ++n, inet_ntoa(from->sin_addr), ntohs(from->sin_port));
 	Log::verbose("relay", "     reply: %.16s:%d\n", self->address, le32toh(self->portUDP));
+
+	if ( debug_flag ){
+		char* repr = hexdump_str((const char*)peer, sizeof(struct MAINFO));
+		Log::debug("relay", "%s", repr);
+		free(repr);
+	}
+}
+
+static void process_message(int sd, MAINFO* self){
+	MAINFO msg = {0, };
+
+	/* receive message */
+	struct sockaddr_in from;
+	socklen_t addrlen = sizeof(struct sockaddr_in);
+	ssize_t bytes = recvfrom(sd, &msg, sizeof(MAINFO), 0, (struct sockaddr *)&from, &addrlen);
+
+	if ( bytes < 0 ){
+		Log::fatal("relay", "recvfrom() returned %d: %s\n", errno, strerror(errno));
+		return;
+	}
+
+	print_message(self, &msg, &from);
+
+	bytes = sendto(sd, self, sizeof(struct MAINFO), 0, (struct sockaddr*)&from, sizeof(struct sockaddr_in));
+	if( bytes < 0 ) {
+		Log::fatal("relay", "sendto() returned %d: %s\n", errno, strerror(errno));
+		return;
+	}
 }
 
 int Relay::run(){
-	MAINFO msg, self;
-
-	memset(&self, 0, sizeof(MAINFO));
+	MAINFO self = {0, };
 	self.version = 2;
 	strncpy(self.address, inet_ntoa(control_addr), 16);
 	strncpy(self.database, db_name, 64);
@@ -159,33 +185,7 @@ int Relay::run(){
 		if ( !(fds[0].revents & POLLIN) ) continue; /* no data */
 		if (   fds[1].revents & POLLIN  ) continue; /* interupted */
 
-		/* reset buffer */
-		memset(&msg, 0, sizeof(MAINFO));
-
-		/* receive message */
-		struct sockaddr_in from;
-		socklen_t addrlen = sizeof(struct sockaddr_in);
-		ssize_t bytes = recvfrom(sd, &msg, sizeof(MAINFO), 0, (struct sockaddr *)&from, &addrlen);
-
-		if ( bytes < 0 ){
-			Log::fatal("relay", "recvfrom() returned %d: %s\n", errno, strerror(errno));
-			break;
-		}
-
-		/* print received message */
-		print_message(&self, &msg, &from);
-
-		if ( debug_flag ){
-			char* repr = hexdump_str((const char*)&self, sizeof(struct MAINFO));
-			Log::debug("relay", "%s", repr);
-			free(repr);
-		}
-
-		bytes = sendto(sd, &self, sizeof(struct MAINFO), 0, (struct sockaddr*)&from, sizeof(struct sockaddr_in));
-		if( bytes < 0 ) {
-			Log::fatal("relay", "sendto() returned %d: %s\n", errno, strerror(errno));
-			break;
-		}
+		process_message(sd, &self);
 	}
 	return 0;
 }
