@@ -32,7 +32,7 @@ case "$1" in
 
 		start-stop-daemon --start --chdir /var/lib/marc --pidfile $PIDFILE --exec $BINARY -- \
             --pidfile $PIDFILE \
-            --relay --syslog --daemon; then
+            --relay --syslog --daemon
 		log_end_msg $?
 		;;
 
