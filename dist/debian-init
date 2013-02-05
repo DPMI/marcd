@@ -21,7 +21,8 @@ MARCD_CONFIG=/etc/default/marcd
 
 . /lib/lsb/init-functions
 
-if [ -e ${MARCD_CONFIG} ]; then
+# Load script configuration
+if [ -f ${MARCD_CONFIG} ]; then
 	. ${MARCD_CONFIG}
 fi
 
@@ -37,7 +38,7 @@ case "$1" in
 
 		start-stop-daemon --start --chdir /var/lib/marc --pidfile $PIDFILE --exec $BINARY -- \
 			--pidfile $PIDFILE \
-			--relay --syslog --daemon --iface ${MARCD_IFACE} \
+			--relay --syslog --daemon --iface ${MARCD_IFACE:-any} \
 			${MARCD_OPTS}
 		log_end_msg $?
 		;;
@@ -53,7 +54,7 @@ case "$1" in
 		;;
 
 	restart)
-		$0 stop && $0 start
+		$0 stop && sleep 1 && $0 start
 		;;
 
 	*)
