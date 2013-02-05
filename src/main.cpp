@@ -331,6 +331,38 @@ static void set_group(const char* groupname){
 	drop_group = groupname;
 }
 
+static void listen_from_iface(const char* iface){
+	/* check if iface exists */
+	struct ifreq ifr;
+	strncpy(ifr.ifr_name, iface, IFNAMSIZ);
+	int sd = socket(AF_INET, SOCK_DGRAM, 0);
+
+	if ( sd < 0 ){
+		Log::fatal(MAIN, "Failed to open socket: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	if( ioctl(sd, SIOCGIFINDEX, &ifr) == -1 ) {
+		Log::fatal(MAIN, "%s is not a valid interface: %s\n", iface, strerror(errno));
+		exit(1);
+	}
+
+	if( ioctl(sd, SIOCGIFADDR, &ifr) == -1 ) {
+		Log::fatal(MAIN, "Failed to get IP on interface %s: %s\n", iface, strerror(errno));
+		exit(1);
+	}
+
+	close(sd);
+	listen_addr = ((sockaddr_in*)&ifr.ifr_addr)->sin_addr;
+}
+
+static void listen_from_ip(const char* addr){
+	if ( inet_aton(addr, &listen_addr) == 0 ){
+		Log::fatal(MAIN, "`%s' is not a valid IPv4 address\n", addr);
+		exit(1);
+	}
+}
+
 #ifdef HAVE_INIPARSER_H
 static void set_config_param(char* dst, size_t bytes, dictionary* src, const char* key){
 	/* iniparser is not const correct and my strings is not writable */
@@ -490,37 +522,11 @@ int main(int argc, char *argv[]){
 			break;
 
 		case 'i': /* --iface */
-		{
-			/* check if iface exists */
-			struct ifreq ifr;
-			strncpy(ifr.ifr_name, optarg, IFNAMSIZ);
-			int sd = socket(AF_INET, SOCK_DGRAM, 0);
-
-			if ( sd < 0 ){
-				Log::fatal(MAIN, "Failed to open socket: %s\n", strerror(errno));
-				exit(1);
-			}
-
-			if( ioctl(sd, SIOCGIFINDEX, &ifr) == -1 ) {
-				Log::fatal(MAIN, "%s is not a valid interface: %s\n", optarg, strerror(errno));
-				exit(1);
-			}
-
-			if( ioctl(sd, SIOCGIFADDR, &ifr) == -1 ) {
-				Log::fatal(MAIN, "Failed to get IP on interface %s: %s\n", optarg, strerror(errno));
-				exit(1);
-			}
-
-			close(sd);
-			listen_addr = ((sockaddr_in*)&ifr.ifr_addr)->sin_addr;
-		}
-		break;
+			listen_from_iface(optarg);
+			break;
 
 		case 'l': /* --listen */
-			if ( inet_aton(optarg, &listen_addr) == 0 ){
-				Log::fatal(MAIN, "`%s' is not a valid IPv4 address\n", optarg);
-				exit(1);
-			}
+			listen_from_ip(optarg);
 			break;
 
 		case 'r': /* --relay */
