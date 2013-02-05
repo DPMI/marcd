@@ -146,14 +146,13 @@ static void process_message(int sd, MAINFO* self){
 	char cmbuf[0x100];
 	struct iovec iov = {&msg, sizeof(MAINFO)};
 	struct sockaddr_in from;
-	struct msghdr msghdr = {
-		.msg_name = &from,
-		.msg_namelen = sizeof(from),
-		.msg_iov = &iov,
-		.msg_iovlen = 1,
-		.msg_control = cmbuf,
-		.msg_controllen = sizeof(cmbuf),
-	};
+	struct msghdr msghdr;
+	msghdr.msg_name = &from;
+	msghdr.msg_namelen = sizeof(from);
+	msghdr.msg_iov = &iov;
+	msghdr.msg_iovlen = 1;
+	msghdr.msg_control = cmbuf;
+	msghdr.msg_controllen = sizeof(cmbuf);
 
 	ssize_t bytes = recvmsg(sd, &msghdr, 0);
 	if ( bytes < 0 ){
