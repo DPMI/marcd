@@ -127,10 +127,14 @@ int Relay::cleanup(){
 	return 0;
 }
 
+static void print_message(const MAINFO* self, const MAINFO* peer, const sockaddr_in* from){
+	static int n = 0;
+	Log::fatal("relay",   "[%d] MArC request from %s:%d.\n", ++n, inet_ntoa(from->sin_addr), ntohs(from->sin_port));
+	Log::verbose("relay", "     reply: %.16s:%d\n", self->address, le32toh(self->portUDP));
+}
+
 int Relay::run(){
-	int counter = 0;
 	MAINFO msg, self;
-	struct sockaddr_in from;
 
 	memset(&self, 0, sizeof(MAINFO));
 	self.version = 2;
@@ -139,7 +143,7 @@ int Relay::run(){
 	strncpy(self.user, db_username, 64);
 	strncpy(self.password, db_password, 64);
 	self.port = db_port;
-	self.portUDP = ma_control_port;
+	self.portUDP = htole32(ma_control_port);
 
 	/* file descriptors to watch */
 	struct pollfd fds[2] = {
@@ -159,6 +163,7 @@ int Relay::run(){
 		memset(&msg, 0, sizeof(MAINFO));
 
 		/* receive message */
+		struct sockaddr_in from;
 		socklen_t addrlen = sizeof(struct sockaddr_in);
 		ssize_t bytes = recvfrom(sd, &msg, sizeof(MAINFO), 0, (struct sockaddr *)&from, &addrlen);
 
@@ -168,10 +173,7 @@ int Relay::run(){
 		}
 
 		/* print received message */
-		counter++;
-		Log::fatal("relay",  " [%d]  MArC request from %s:%d.\n", counter, inet_ntoa(from.sin_addr), ntohs(from.sin_port));
-		Log::verbose("relay", "         MP Listens to (UDP) %.16s:%d\n", msg.address, ntohs(msg.port));
-		Log::verbose("relay", "         MArC: %.16s (%d/%d) database %s %s/%s\n", self.address, ma_relay_port, ma_control_port, db_name, db_username, strlen(db_password) > 0 ? db_password : "#NO#");
+		print_message(&self, &msg, &from);
 
 		if ( debug_flag ){
 			char* repr = hexdump_str((const char*)&self, sizeof(struct MAINFO));
