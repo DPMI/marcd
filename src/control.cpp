@@ -413,8 +413,31 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
 		return;
 	}
 
-	if ( !db_query("SELECT filter_id, `index`, mode+0, CI, VLAN_TCI, VLAN_TCI_MASK, ETH_TYPE, ETH_TYPE_MASK, ETH_SRC, ETH_SRC_MASK, ETH_DST, ETH_DST_MASK, IP_PROTO, IP_SRC, IP_SRC_MASK, IP_DST, IP_DST_MASK, SRC_PORT, SRC_PORT_MASK, DST_PORT, DST_PORT_MASK, destaddr, type, caplen FROM filter WHERE mp = (SELECT id FROM measurementpoints WHERE MAMPid = '%s' LIMIT 1) filter_id='%d' LIMIT 1",
-	               mampid_get(filter->MAMPid), ntohl(filter->id)) ){
+	if ( !db_query(
+		     "SELECT "
+		     "  `filter_id`, "
+		     "  `index`, "
+		     "  `mode`+0, "
+		     "  `CI`, "
+		     "  `VLAN_TCI`, `VLAN_TCI_MASK`, "
+		     "  `ETH_TYPE`, `ETH_TYPE_MASK`, "
+		     "  `ETH_SRC`, `ETH_SRC_MASK`, "
+		     "  `ETH_DST`, `ETH_DST_MASK`, "
+		     "  `IP_PROTO`, "
+		     "  `IP_SRC`, `IP_SRC_MASK`, "
+		     "  `IP_DST`, `IP_DST_MASK`, "
+		     "  `SRC_PORT`, `SRC_PORT_MASK`, "
+		     "  `DST_PORT`, `DST_PORT_MASK`, "
+		     "  `destaddr`, "
+		     "  `type`, "
+		     "  `caplen` "
+		     "FROM "
+		     "  `filter` "
+		     "WHERE "
+		     "  `mp` = (SELECT `id` FROM `measurementpoints` WHERE `MAMPid` = '%s' LIMIT 1) AND "
+		     "  `filter_id`='%d' "
+		     "LIMIT 1",
+		     mampid_get(filter->MAMPid), ntohl(filter->id)) ){
 		return;
 	}
 
