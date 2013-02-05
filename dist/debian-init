@@ -26,25 +26,25 @@ if [ -e ${MARCD_CONFIG} ]; then
 fi
 
 case "$1" in
-    start)
-        log_daemon_msg "Starting $NAME" "marcd"
+	start)
+		log_daemon_msg "Starting $NAME" "marcd"
 
-        if [ ! -e $CONFIGFILE ]; then
-            log_action_msg "No configuration present, create \`$CONFIGFILE' and try again!"
+		if [ ! -e $CONFIGFILE ]; then
+			log_action_msg "No configuration present, create \`$CONFIGFILE' and try again!"
 			log_end_msg 1
 			exit 1
-        fi
+		fi
 
 		start-stop-daemon --start --chdir /var/lib/marc --pidfile $PIDFILE --exec $BINARY -- \
-            --pidfile $PIDFILE \
-            --relay --syslog --daemon --iface ${MARCD_IFACE} \
-            ${MARCD_OPTS}
+			--pidfile $PIDFILE \
+			--relay --syslog --daemon --iface ${MARCD_IFACE} \
+			${MARCD_OPTS}
 		log_end_msg $?
 		;;
 
 	stop)
-        log_daemon_msg "Stopping $NAME" "marcd"
-        start-stop-daemon --stop --signal INT --pidfile $PIDFILE
+		log_daemon_msg "Stopping $NAME" "marcd"
+		start-stop-daemon --stop --signal INT --pidfile $PIDFILE
 		log_end_msg $?
 		;;
 
