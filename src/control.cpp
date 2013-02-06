@@ -362,7 +362,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
 	if( !is_authorized ){ // The MP exists, but isnt authorized.
 		if ( !verbose_flag ){
-			Log::fatal("MArCd", "MPinitialization request from %s:%d -> not authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
+			Log::message("MArCd", "MPinitialization request from %s:%d -> not authorized\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
 		} else {
 			Log::verbose("MArCd", "This MP exists but is not yet authorized.\n");
 		}
