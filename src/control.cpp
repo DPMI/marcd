@@ -21,6 +21,7 @@
 #include "config.h"
 #endif
 
+#include "globals.hpp"
 #include "control.hpp"
 #include "database.hpp"
 #include "utils.hpp"
@@ -53,8 +54,6 @@ enum MPStatusEnum {
 extern int verbose_flag;
 extern int debug_flag;
 extern bool volatile keep_running;
-
-extern int ma_control_port;
 static marc_context_t marc;
 
 static void MP_Init(marc_context_t marc, MPinitialization* init, struct sockaddr* from);
@@ -78,7 +77,7 @@ int Control::init(){
 
 	/* initialize libmarc */
 	int ret;
-	if ( (ret=marc_init_server(&marc, ma_control_port)) != 0 ){
+	if ( (ret=marc_init_server(&marc, control.port)) != 0 ){
 		Log::fatal("MArCd", "marc_init_server() returned %d: %s\n", ret, strerror(ret));
 		return 1;
 	}

@@ -19,6 +19,7 @@ MArCd_SOURCES = \
 	src/daemon.cpp src/daemon.hpp \
 	src/database.cpp src/database.hpp \
 	src/control.cpp src/control.hpp \
+	src/globals.cpp src/globals.hpp \
 	src/relay.cpp src/relay.hpp \
 	src/status.cpp \
 	src/utils.cpp src/utils.hpp \
@@ -31,7 +32,7 @@ endif
 
 MArelayD_CXXFLAGS = -Wall -DBUILD_RELAY ${libcap_marc_CFLAGS}
 MArelayD_LDADD = ${libcap_marc_LIBS} ${libcap_filter_LIBS}
-MArelayD_SOURCES = src/relay.cpp src/log.cpp src/log.hpp
+MArelayD_SOURCES = src/relay.cpp src/log.cpp src/log.hpp src/globals.cpp src/globals.hpp
 
 BUILT_SOURCES = vcs.h
 CLEANFILES = vcs.h

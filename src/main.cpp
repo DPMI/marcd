@@ -21,6 +21,7 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
+#include "globals.hpp"
 #include "control.hpp"
 #include "relay.hpp"
 #include "database.hpp"
@@ -54,12 +55,8 @@ extern "C" {
 
 /* GLOBALS */
 static const char* program_name;
-int ma_control_port = MA_CONTROL_DEFAULT_PORT;
-int ma_relay_port = MA_RELAY_DEFAULT_PORT;
 
 char* rrdpath;
-in_addr listen_addr;
-in_addr control_addr;
 static int daemon_mode = 0;
 static const char* pidfile = DATA_DIR"/marc.pid";
 int verbose_flag = 0;
@@ -231,7 +228,6 @@ static const char* get_groupname(const gid_t id){
 }
 
 static void default_env(){
-	listen_addr.s_addr = htonl(INADDR_ANY);
 	rrdpath = strdup(DATA_DIR);
 
 	struct passwd* passwd = getpwnam(drop_username);
@@ -329,7 +325,7 @@ static void set_group(const char* groupname){
 static void listen_from_iface(const char* iface){
 	/* special handing of "any" interface */
 	if ( strcmp(iface, "any") == 0 ){
-		listen_addr.s_addr = INADDR_ANY;
+		relay.addr.s_addr = htonl(INADDR_ANY);
 		return;
 	}
 
@@ -354,11 +350,11 @@ static void listen_from_iface(const char* iface){
 	}
 
 	close(sd);
-	listen_addr = ((sockaddr_in*)&ifr.ifr_addr)->sin_addr;
+	relay.addr = ((sockaddr_in*)&ifr.ifr_addr)->sin_addr;
 }
 
 static void listen_from_ip(const char* addr){
-	if ( inet_aton(addr, &listen_addr) == 0 ){
+	if ( inet_aton(addr, &control.addr) == 0 ){
 		Log::fatal(MAIN, "`%s' is not a valid IPv4 address\n", addr);
 		exit(1);
 	}
@@ -536,7 +532,7 @@ int main(int argc, char *argv[]){
 			if ( optarg ){
 				int tmp = atoi(optarg);
 				if ( tmp > 0 ){
-					ma_relay_port = tmp;
+					relay.port = tmp;
 				} else {
 					Log::error(MAIN, "Invalid port given to --relay: %s. Ignored\n", optarg);
 				}
@@ -640,7 +636,7 @@ int main(int argc, char *argv[]){
 	threads += (int)have_control_daemon;
 	threads += (int)have_relay_daemon;
 	pthread_barrier_init(&barrier, NULL, threads);
-	control_addr.s_addr = listen_addr.s_addr;
+	control.addr = relay.addr;
 
 	if ( have_control_daemon && (ret=Daemon::instantiate<Control>(2000, &barrier)) != 0 ){
 		Log::fatal(MAIN, "Failed to initialize control daemon, terminating.\n");
