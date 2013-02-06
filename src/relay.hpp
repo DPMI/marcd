@@ -30,7 +30,9 @@ public:
   virtual int cleanup();
   virtual int run();
 
- private:
+private:
+	/* wrapper with error logging */
+	bool setsockopt(int level, const char* name, int optname, void* optval, socklen_t optlen);
   int sd;
 };
 

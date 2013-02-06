@@ -91,9 +91,9 @@ int Relay::init(){
 	}
 
 	int on = 1;
-	setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
-	setsockopt(sd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(int));
-	setsockopt(sd, IPPROTO_IP, IP_PKTINFO,   &on, sizeof(int));
+	if ( !setsockopt(SOL_SOCKET, "SO_REUSEADDR", SO_REUSEADDR, &on, sizeof(int)) ) return 1;
+	if ( !setsockopt(SOL_SOCKET, "SO_BROADCAST", SO_BROADCAST, &on, sizeof(int)) ) return 1;
+	if ( !setsockopt(IPPROTO_IP, "IP_PKTINFO",    IP_PKTINFO,  &on, sizeof(int)) ) return 1;
 
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
@@ -123,6 +123,14 @@ int Relay::init(){
 int Relay::cleanup(){
 	Log::verbose("relay", "Thread finished.\n");
 	return 0;
+}
+
+bool Relay::setsockopt(int level, const char* name, int optname, void* optval, socklen_t optlen){
+	if ( ::setsockopt(sd, level, optname, optval, optlen) != 0 ){
+		Log::fatal("relay", "setsockopt(%d, %s, ...) failed: %s\n", level, name, strerror(errno));
+		return false;
+	}
+	return true;
 }
 
 static void print_message(const MAINFO* self, const MAINFO* peer, const sockaddr_in* from){
