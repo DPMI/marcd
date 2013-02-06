@@ -277,6 +277,12 @@ static int check_env(){
 		Log::fatal(MAIN, "Need write persmission to data dir: %s\n", rrdpath);
 		return 0;
 	}
+
+	if ( daemon_mode && access(pidfile, R_OK) == 0 ){
+		Log::fatal(MAIN, "pidfile `%s' already exists, make sure no other %s is running.\n", pidfile, program_name);
+		return 0;
+	}
+
 	return 1;
 }
 
@@ -582,11 +588,6 @@ int main(int argc, char *argv[]){
 	}
 
 	if ( daemon_mode ){
-		if ( access(pidfile, R_OK) == 0 ){
-			Log::fatal(MAIN, "pidfile `%s' already exists, make sure no other %s is running.\n", pidfile, program_name);
-			return 1;
-		}
-
 		/* opening file before fork since it will be a fatal error if it fails to write the pid */
 		FILE* fp = fopen(pidfile, "w");
 		if ( !fp ){
