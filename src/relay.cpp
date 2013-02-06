@@ -101,7 +101,8 @@ int Relay::init(){
 	addr.sin_addr = relay.addr;
 
 	/* bind local server port */
-	Log::verbose("relay", "Listens to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+	char buf[IF_NAMESIZE];
+	Log::verbose("relay", "Listens to %s:%d on %s\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), relay.iface ? if_indextoname(relay.iface, buf) : "any interface");
 	if ( bind(sd, (struct sockaddr *)&addr, sizeof(addr)) < 0 ){
 		Log::fatal("relay", "  Cannot bind port number %d\n", relay.port);
 		return 1;
@@ -161,6 +162,13 @@ static void process_message(int sd, MAINFO* self){
 		for ( struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msghdr); cmsg != NULL; cmsg = CMSG_NXTHDR(&msghdr, cmsg) ){
 			if ( cmsg->cmsg_level != IPPROTO_IP || cmsg->cmsg_type != IP_PKTINFO ) continue;
 			struct in_pktinfo* pi = (struct in_pktinfo*)CMSG_DATA(cmsg);
+
+			/* ensure we listen on this interface */
+			if ( relay.iface && relay.iface != pi->ipi_ifindex ){
+				return;
+			}
+
+			/* setup correct address for this peer */
 			strncpy(self->address, inet_ntoa(pi->ipi_spec_dst), 16);
 			break;
 		}

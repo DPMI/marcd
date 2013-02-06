@@ -120,7 +120,7 @@ void show_usage(){
 	printf("Usage: %s [OPTIONS] DATABASE\n", program_name);
 	printf("  -r, --relay[=PORT]  In addition to running MArCd, setup relaying so a\n"
 	       "                      separate MArelayD isn't needed.\n"
-	       "  -i, --iface=IFACE   Only listen on IFACE [default: any].\n"
+	       "  -i, --iface=IFACE   Only listen on IFACE (relay only).\n"
 	       "  -l, --listen=IP     Only listen on IP [default: 0.0.0.0].\n"
 	       "      --datadir=PATH  Use PATH as rrdtool data storage. [default: \n"
 	       "                      " DATA_DIR "]\n"
@@ -322,38 +322,14 @@ static void set_group(const char* groupname){
 	drop_group = groupname;
 }
 
-static void listen_from_iface(const char* iface){
-	/* special handing of "any" interface */
-	if ( strcmp(iface, "any") == 0 ){
-		relay.addr.s_addr = htonl(INADDR_ANY);
-		return;
-	}
-
-	/* check if iface exists */
-	struct ifreq ifr;
-	strncpy(ifr.ifr_name, iface, IFNAMSIZ);
-	int sd = socket(AF_INET, SOCK_DGRAM, 0);
-
-	if ( sd < 0 ){
-		Log::fatal(MAIN, "Failed to open socket: %s\n", strerror(errno));
+static void set_relay_iface(const char* iface){
+	if ( (relay.iface=if_nametoindex(iface)) == 0 ){
+		fprintf(stderr, "%s: `%s' is not a valid interface.\n", program_name, iface);
 		exit(1);
 	}
-
-	if( ioctl(sd, SIOCGIFINDEX, &ifr) == -1 ) {
-		Log::fatal(MAIN, "%s is not a valid interface: %s\n", iface, strerror(errno));
-		exit(1);
-	}
-
-	if( ioctl(sd, SIOCGIFADDR, &ifr) == -1 ) {
-		Log::fatal(MAIN, "Failed to get IP on interface %s: %s\n", iface, strerror(errno));
-		exit(1);
-	}
-
-	close(sd);
-	relay.addr = ((sockaddr_in*)&ifr.ifr_addr)->sin_addr;
 }
 
-static void listen_from_ip(const char* addr){
+static void set_control_ip(const char* addr){
 	if ( inet_aton(addr, &control.addr) == 0 ){
 		Log::fatal(MAIN, "`%s' is not a valid IPv4 address\n", addr);
 		exit(1);
@@ -519,11 +495,11 @@ int main(int argc, char *argv[]){
 			break;
 
 		case 'i': /* --iface */
-			listen_from_iface(optarg);
+			set_relay_iface(optarg);
 			break;
 
 		case 'l': /* --listen */
-			listen_from_ip(optarg);
+			set_control_ip(optarg);
 			break;
 
 		case 'r': /* --relay */
