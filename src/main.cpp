@@ -157,11 +157,6 @@ void show_usage(){
 }
 
 static int privilege_drop(){
-	if ( getuid() != 0 ){
-		Log::message(MAIN, "Not executing as uid=0, cannot drop privileges.\n");
-		return 0;
-	}
-
 	Log::message(MAIN, "Dropping privileges to %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
 	if ( setgid(drop_gid) != 0 ){
 		Log::error(MAIN, "  setgid() failed: %s\n", strerror(errno));
@@ -591,6 +586,12 @@ int main(int argc, char *argv[]){
 	}
 
 	setup_output();
+
+	/* test if possible to drop privileges */
+	if ( drop_priv_flag && getuid() != 0 ){
+		Log::message(MAIN, "Not executing as uid=0, cannot drop privileges.\n");
+		drop_priv_flag = 0;
+	}
 
 	/* Drop privileges.
 	 * Done before forking since unlinking requires write permission to folder so
