@@ -102,7 +102,7 @@ int Relay::init(){
 
 	/* bind local server port */
 	char buf[IF_NAMESIZE];
-	Log::verbose("relay", "Listens to %s:%d on %s\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), relay.iface ? if_indextoname(relay.iface, buf) : "any interface");
+	Log::message("relay", "Listens to %s:%d on %s\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), relay.iface ? if_indextoname(relay.iface, buf) : "any interface");
 	if ( bind(sd, (struct sockaddr *)&addr, sizeof(addr)) < 0 ){
 		Log::fatal("relay", "  Cannot bind port number %d\n", relay.port);
 		return 1;
@@ -134,9 +134,9 @@ bool Relay::setsockopt(int level, const char* name, int optname, void* optval, s
 }
 
 static void print_message(const MAINFO* self, const MAINFO* peer, const sockaddr_in* from){
-	static int n = 0;
-	Log::message("relay", "[%d] MArC request from %s:%d.\n", ++n, inet_ntoa(from->sin_addr), ntohs(from->sin_port));
-	Log::verbose("relay", "     reply: %.16s:%d\n", self->address, le32toh(self->portUDP));
+	Log::message("relay", "MArelayD request from %s:%d -> %.16s:%d\n",
+	             inet_ntoa(from->sin_addr), ntohs(from->sin_port),
+	             self->address, le32toh(self->portUDP));
 
 	if ( debug_flag ){
 		char* repr = hexdump_str((const char*)peer, sizeof(struct MAINFO));
