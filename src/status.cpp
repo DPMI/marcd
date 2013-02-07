@@ -115,7 +115,7 @@ static void update(const char* when, const char* MAMPid, int CI, long packets, l
 
 static void reset(const char* MAMPid, int noCI, const char* iface[]){
 #ifdef HAVE_RRDTOOL
-	Log::verbose("status", "Resetting RRD counters for %s\n", MAMPid);
+	Log::verbose("status", "Resetting RRD counters for %s (%d CI)\n", MAMPid, noCI);
 	update("-1", MAMPid, -1, -1, -1, -1, -1, iface);
 	update("N", MAMPid, -1, 0, 0, 0, 0, iface);
 
