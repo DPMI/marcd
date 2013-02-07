@@ -330,6 +330,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		         "SET\n"
 		         "  ip='%s',\n"
 		         "  port='%d',\n"
+		         "  noCI=%d,\n"
 		         "  maxFilters=%d,\n"
 		         "  drivers=%d,\n"
 		         "  version='%s',\n"
@@ -338,6 +339,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		         "  mampid='%s'"
 		         , inet_ntoa(MPadr.sin_addr)
 		         , ntohs(MPinit->port)
+		         , ntohs(MPinit->noCI)
 		         , ntohs(MPinit->maxFilters)
 		         , ntohl(MPinit->drivers),
 		         version, iface,
