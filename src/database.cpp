@@ -34,7 +34,7 @@ int  db_port = MYSQL_PORT;
 char db_name[64] = {0,};
 char db_username[64] = {0,};
 char db_password[64] = {0,};
-static const int marc_web_requirement = 1;
+static const int marc_web_requirement = 5;
 
 int db_connect(){
 	Log::verbose("MArCd", "Connecting to mysql://%s@%s:%d/%s (using password: %s)\n",

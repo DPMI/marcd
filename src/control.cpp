@@ -239,6 +239,15 @@ static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sock
 	return 1;
 }
 
+static int version_cmp(const versionex_t v, int major, int minor, int micro){
+	if ( v.major > major ) return true;
+	if ( v.major < major ) return false;
+	if ( v.minor > minor ) return true;
+	if ( v.minor < minor ) return false;
+	if ( v.micro > micro ) return true;
+	if ( v.micro < micro ) return false;
+	return true;
+}
 
 static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockaddr* from){
 	struct sockaddr_in MPadr;
@@ -252,6 +261,9 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
 	memcpy(&MPadr.sin_addr.s_addr, MPinit->ipaddress,sizeof(struct in_addr));
 
+	const int is_v07 = ntohs(MPinit->version.protocol.major) > 0 || ntohs(MPinit->version.protocol.minor) >= 7;
+	const int is_mp07_11 = is_v07 && version_cmp(MPinit->version.self, 0, 7, 11);
+
 	Log::verbose("MArCd", "MPinitialization from %s:%d:\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
 	Log::verbose("MArCd", "     .type= %d \n",MPinit->type);
 	Log::verbose("MArCd", "     .mac = %s \n", hexdump_address(&MPinit->hwaddr));
@@ -260,9 +272,12 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 	Log::verbose("MArCd", "     .port = %d \n", ntohs(MPinit->port));
 	Log::verbose("MArCd", "     .maxFilters = %d \n",ntohs(MPinit->maxFilters));
 	Log::verbose("MArCd", "     .noCI = %d \n", ntohs(MPinit->noCI));
+	if ( is_mp07_11 ){
+		Log::verbose("MArCd", "     .ma_mtu = %d \n", ntohs(MPinit->ma_mtu));
+	}
 	Log::verbose("MArCd", "     .MAMPid = %s \n", mampid_get(MPinit->MAMPid));
 
-	if ( ntohs(MPinit->version.protocol.major) > 0 || ntohs(MPinit->version.protocol.minor) >= 7 ){
+	if ( is_v07 ){
 		Log::verbose("MArCd", "     .version.protocol = %d.%d\n", ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor));
 		Log::verbose("MArCd", "     .version.caputils = %d.%d.%d\n", MPinit->version.caputils.major, MPinit->version.caputils.minor , MPinit->version.caputils.micro);
 		Log::verbose("MArCd", "     .version.mp       = %d.%d.%d\n", MPinit->version.self.major, MPinit->version.self.minor , MPinit->version.self.micro);
@@ -332,6 +347,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		         "  port='%d',\n"
 		         "  noCI=%d,\n"
 		         "  maxFilters=%d,\n"
+		         "  mtu=%d,\n"
 		         "  drivers=%d,\n"
 		         "  version='%s',\n"
 		         "  CI_iface='%s'\n"
@@ -341,6 +357,7 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		         , ntohs(MPinit->port)
 		         , ntohs(MPinit->noCI)
 		         , ntohs(MPinit->maxFilters)
+		         , is_mp07_11 ? ntohs(MPinit->ma_mtu) : -1
 		         , ntohl(MPinit->drivers),
 		         version, iface,
 		         MAMPid);
