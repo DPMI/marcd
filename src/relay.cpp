@@ -21,6 +21,7 @@
 #include "config.h"
 #endif
 
+#include "globals.hpp"
 #include "relay.hpp"
 #include "log.hpp"
 
@@ -64,11 +65,6 @@ char db_password[64] = {0,};
 #define MAX_MSG 1500
 
 extern int debug_flag;
-extern const char* iface;
-extern int ma_control_port;
-extern int ma_relay_port;
-extern in_addr listen_addr;
-extern in_addr control_addr;
 extern bool volatile keep_running;
 
 struct MAINFO {
@@ -95,24 +91,25 @@ int Relay::init(){
 	}
 
 	int on = 1;
-	setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
-	setsockopt(sd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(int));
-	setsockopt(sd, IPPROTO_IP, IP_PKTINFO,   &on, sizeof(int));
+	if ( !setsockopt(SOL_SOCKET, "SO_REUSEADDR", SO_REUSEADDR, &on, sizeof(int)) ) return 1;
+	if ( !setsockopt(SOL_SOCKET, "SO_BROADCAST", SO_BROADCAST, &on, sizeof(int)) ) return 1;
+	if ( !setsockopt(IPPROTO_IP, "IP_PKTINFO",    IP_PKTINFO,  &on, sizeof(int)) ) return 1;
 
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_port = htons(relay.port);
+	addr.sin_addr = relay.addr;
 
 	/* bind local server port */
-	addr.sin_port = htons(ma_relay_port);
-	Log::verbose("relay", "Listens to %s:%d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+	char buf[IF_NAMESIZE];
+	Log::message("relay", "Listens to %s:%d on %s\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), relay.iface ? if_indextoname(relay.iface, buf) : "any interface");
 	if ( bind(sd, (struct sockaddr *)&addr, sizeof(addr)) < 0 ){
-		Log::fatal("relay", "cannot bind port number %d\n", ma_relay_port);
+		Log::fatal("relay", "  Cannot bind port number %d\n", relay.port);
 		return 1;
 	}
 
 	Log::verbose("relay", "Relay info:\n");
-	Log::verbose("relay", "  MArC: %s:%d\n", inet_ntoa(control_addr), ma_control_port);
+	Log::verbose("relay", "  MArC: %s:%d\n", inet_ntoa(control.addr), control.port);
 	if ( db_name[0] == 0 ){
 		Log::verbose("relay", "  Database: unset\n");
 	} else {
@@ -128,10 +125,18 @@ int Relay::cleanup(){
 	return 0;
 }
 
+bool Relay::setsockopt(int level, const char* name, int optname, void* optval, socklen_t optlen){
+	if ( ::setsockopt(sd, level, optname, optval, optlen) != 0 ){
+		Log::fatal("relay", "setsockopt(%d, %s, ...) failed: %s\n", level, name, strerror(errno));
+		return false;
+	}
+	return true;
+}
+
 static void print_message(const MAINFO* self, const MAINFO* peer, const sockaddr_in* from){
-	static int n = 0;
-	Log::fatal("relay",   "[%d] MArC request from %s:%d.\n", ++n, inet_ntoa(from->sin_addr), ntohs(from->sin_port));
-	Log::verbose("relay", "     reply: %.16s:%d\n", self->address, le32toh(self->portUDP));
+	Log::message("relay", "MArelayD request from %s:%d -> %.16s:%d\n",
+	             inet_ntoa(from->sin_addr), ntohs(from->sin_port),
+	             self->address, le32toh(self->portUDP));
 
 	if ( debug_flag ){
 		char* repr = hexdump_str((const char*)peer, sizeof(struct MAINFO));
@@ -161,10 +166,17 @@ static void process_message(int sd, MAINFO* self){
 	}
 
 	/* find destination address */
-	if ( control_addr.s_addr == INADDR_ANY ){
+	if ( control.addr.s_addr == INADDR_ANY ){
 		for ( struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msghdr); cmsg != NULL; cmsg = CMSG_NXTHDR(&msghdr, cmsg) ){
 			if ( cmsg->cmsg_level != IPPROTO_IP || cmsg->cmsg_type != IP_PKTINFO ) continue;
 			struct in_pktinfo* pi = (struct in_pktinfo*)CMSG_DATA(cmsg);
+
+			/* ensure we listen on this interface */
+			if ( relay.iface && relay.iface != pi->ipi_ifindex ){
+				return;
+			}
+
+			/* setup correct address for this peer */
 			strncpy(self->address, inet_ntoa(pi->ipi_spec_dst), 16);
 			break;
 		}
@@ -182,12 +194,12 @@ static void process_message(int sd, MAINFO* self){
 int Relay::run(){
 	MAINFO self = {0, };
 	self.version = 2;
-	strncpy(self.address, inet_ntoa(control_addr), 16);
+	strncpy(self.address, inet_ntoa(control.addr), 16);
 	strncpy(self.database, db_name, 64);
 	strncpy(self.user, db_username, 64);
 	strncpy(self.password, db_password, 64);
 	self.port = db_port;
-	self.portUDP = htole32(ma_control_port);
+	self.portUDP = htole32(control.port);
 
 	/* file descriptors to watch */
 	struct pollfd fds[2] = {
@@ -210,10 +222,6 @@ int Relay::run(){
 
 #ifdef BUILD_RELAY
 
-int ma_control_port = MA_CONTROL_DEFAULT_PORT;
-int ma_relay_port = MA_RELAY_DEFAULT_PORT;
-in_addr listen_addr;
-in_addr control_addr;
 int verbose_flag = 0;
 int debug_flag = 0;
 FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
@@ -266,7 +274,7 @@ int main(int argc, char *argv[]){
 			break;
 
 		case 'p':
-			ma_relay_port = atoi(optarg);
+			relay.port = atoi(optarg);
 			break;
 
 		case 's':
@@ -274,11 +282,11 @@ int main(int argc, char *argv[]){
 			break;
 
 		case 't':
-			ma_control_port = atoi(optarg);
+			control.port = atoi(optarg);
 			break;
 
 		case 'm':
-			inet_aton(optarg, &control_addr);
+			inet_aton(optarg, &control.addr);
 			break;
 
 		case 'h':
@@ -304,7 +312,7 @@ int main(int argc, char *argv[]){
 		}
 	}
 
-	if ( control_addr.s_addr == 0 ){
+	if ( control.addr.s_addr == INADDR_ANY ){
 		fprintf(stderr, "You must supply a IP address to the MA-Controller.\n");
 		exit(1);
 	}

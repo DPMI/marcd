@@ -21,6 +21,7 @@
 #include "config.h"
 #endif /* HAVE_CONFIG_H */
 
+#include "globals.hpp"
 #include "control.hpp"
 #include "relay.hpp"
 #include "database.hpp"
@@ -54,12 +55,8 @@ extern "C" {
 
 /* GLOBALS */
 static const char* program_name;
-int ma_control_port = MA_CONTROL_DEFAULT_PORT;
-int ma_relay_port = MA_RELAY_DEFAULT_PORT;
 
 char* rrdpath;
-in_addr listen_addr;
-in_addr control_addr;
 static int daemon_mode = 0;
 static const char* pidfile = DATA_DIR"/marc.pid";
 int verbose_flag = 0;
@@ -123,7 +120,7 @@ void show_usage(){
 	printf("Usage: %s [OPTIONS] DATABASE\n", program_name);
 	printf("  -r, --relay[=PORT]  In addition to running MArCd, setup relaying so a\n"
 	       "                      separate MArelayD isn't needed.\n"
-	       "  -i, --iface=IFACE   Only listen on IFACE [default: any].\n"
+	       "  -i, --iface=IFACE   Only listen on IFACE (relay only).\n"
 	       "  -l, --listen=IP     Only listen on IP [default: 0.0.0.0].\n"
 	       "      --datadir=PATH  Use PATH as rrdtool data storage. [default: \n"
 	       "                      " DATA_DIR "]\n"
@@ -157,11 +154,6 @@ void show_usage(){
 }
 
 static int privilege_drop(){
-	if ( getuid() != 0 ){
-		Log::message(MAIN, "Not executing as uid=0, cannot drop privileges.\n");
-		return 0;
-	}
-
 	Log::message(MAIN, "Dropping privileges to %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
 	if ( setgid(drop_gid) != 0 ){
 		Log::error(MAIN, "  setgid() failed: %s\n", strerror(errno));
@@ -236,7 +228,6 @@ static const char* get_groupname(const gid_t id){
 }
 
 static void default_env(){
-	listen_addr.s_addr = htonl(INADDR_ANY);
 	rrdpath = strdup(DATA_DIR);
 
 	struct passwd* passwd = getpwnam(drop_username);
@@ -286,6 +277,12 @@ static int check_env(){
 		Log::fatal(MAIN, "Need write persmission to data dir: %s\n", rrdpath);
 		return 0;
 	}
+
+	if ( daemon_mode && access(pidfile, R_OK) == 0 ){
+		Log::fatal(MAIN, "pidfile `%s' already exists, make sure no other %s is running.\n", pidfile, program_name);
+		return 0;
+	}
+
 	return 1;
 }
 
@@ -331,39 +328,15 @@ static void set_group(const char* groupname){
 	drop_group = groupname;
 }
 
-static void listen_from_iface(const char* iface){
-	/* special handing of "any" interface */
-	if ( strcmp(iface, "any") == 0 ){
-		listen_addr.s_addr = INADDR_ANY;
-		return;
-	}
-
-	/* check if iface exists */
-	struct ifreq ifr;
-	strncpy(ifr.ifr_name, iface, IFNAMSIZ);
-	int sd = socket(AF_INET, SOCK_DGRAM, 0);
-
-	if ( sd < 0 ){
-		Log::fatal(MAIN, "Failed to open socket: %s\n", strerror(errno));
+static void set_relay_iface(const char* iface){
+	if ( (relay.iface=if_nametoindex(iface)) == 0 ){
+		fprintf(stderr, "%s: `%s' is not a valid interface.\n", program_name, iface);
 		exit(1);
 	}
-
-	if( ioctl(sd, SIOCGIFINDEX, &ifr) == -1 ) {
-		Log::fatal(MAIN, "%s is not a valid interface: %s\n", iface, strerror(errno));
-		exit(1);
-	}
-
-	if( ioctl(sd, SIOCGIFADDR, &ifr) == -1 ) {
-		Log::fatal(MAIN, "Failed to get IP on interface %s: %s\n", iface, strerror(errno));
-		exit(1);
-	}
-
-	close(sd);
-	listen_addr = ((sockaddr_in*)&ifr.ifr_addr)->sin_addr;
 }
 
-static void listen_from_ip(const char* addr){
-	if ( inet_aton(addr, &listen_addr) == 0 ){
+static void set_control_ip(const char* addr){
+	if ( inet_aton(addr, &control.addr) == 0 ){
 		Log::fatal(MAIN, "`%s' is not a valid IPv4 address\n", addr);
 		exit(1);
 	}
@@ -528,11 +501,11 @@ int main(int argc, char *argv[]){
 			break;
 
 		case 'i': /* --iface */
-			listen_from_iface(optarg);
+			set_relay_iface(optarg);
 			break;
 
 		case 'l': /* --listen */
-			listen_from_ip(optarg);
+			set_control_ip(optarg);
 			break;
 
 		case 'r': /* --relay */
@@ -541,7 +514,7 @@ int main(int argc, char *argv[]){
 			if ( optarg ){
 				int tmp = atoi(optarg);
 				if ( tmp > 0 ){
-					ma_relay_port = tmp;
+					relay.port = tmp;
 				} else {
 					Log::error(MAIN, "Invalid port given to --relay: %s. Ignored\n", optarg);
 				}
@@ -592,6 +565,12 @@ int main(int argc, char *argv[]){
 
 	setup_output();
 
+	/* test if possible to drop privileges */
+	if ( drop_priv_flag && getuid() != 0 ){
+		Log::message(MAIN, "Not executing as uid=0, cannot drop privileges.\n");
+		drop_priv_flag = 0;
+	}
+
 	/* Drop privileges.
 	 * Done before forking since unlinking requires write permission to folder so
 	 * if it fails to write it will fail unlinking. It is also done before
@@ -609,11 +588,6 @@ int main(int argc, char *argv[]){
 	}
 
 	if ( daemon_mode ){
-		if ( access(pidfile, R_OK) == 0 ){
-			Log::fatal(MAIN, "pidfile `%s' already exists, make sure no other %s is running.\n", pidfile, program_name);
-			return 1;
-		}
-
 		/* opening file before fork since it will be a fatal error if it fails to write the pid */
 		FILE* fp = fopen(pidfile, "w");
 		if ( !fp ){
@@ -639,7 +613,7 @@ int main(int argc, char *argv[]){
 	threads += (int)have_control_daemon;
 	threads += (int)have_relay_daemon;
 	pthread_barrier_init(&barrier, NULL, threads);
-	control_addr.s_addr = listen_addr.s_addr;
+	control.addr = relay.addr;
 
 	if ( have_control_daemon && (ret=Daemon::instantiate<Control>(2000, &barrier)) != 0 ){
 		Log::fatal(MAIN, "Failed to initialize control daemon, terminating.\n");

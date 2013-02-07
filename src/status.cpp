@@ -212,7 +212,7 @@ void MP_Status(marc_context_t marc, struct MPstatusExtended* MPstat, struct sock
 
 static void create(const char* mampid, int CI, const char* iface[]){
 	char* filename = table_name(mampid, CI, iface);
-	const char* argv[] = {
+	char* argv[] = {
 		"create", filename,
 		"--step", "60",
 		"DS:total:COUNTER:180:0:U",

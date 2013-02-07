@@ -1,5 +1,6 @@
 ACLOCAL_AMFLAGS = -I m4
 
+noinst_LIBRARIES = libcommon.a libstatus.a
 bin_PROGRAMS = 
 EXTRA_DIST = marcd.conf.dist
 
@@ -13,16 +14,21 @@ endif
 
 pkgconf_DATA = marcd.conf.dist
 
-MArCd_CXXFLAGS = -Wall -pthread ${MYSQL_CLIENT_CFLAGS} ${libcap_marc_CFLAGS} ${RRDTOOL_CFLAGS} ${iniparser_CFLAGS}
-MArCd_LDADD = ${MYSQL_CLIENT_LIBS} ${libcap_marc_LIBS} ${libcap_utils_LIBS} ${RRDTOOL_LIBS} ${iniparser_LIBS}
+# shades sources
+libcommon_a_SOURCES = src/globals.cpp src/globals.hpp src/log.cpp src/log.hpp
+
+# src/status.cpp needs special CXXFLAGS because of the way it interacts with rrdtool (not const correct)
+libstatus_a_SOURCES = src/status.cpp
+libstatus_a_CXXFLAGS = ${AM_CXXFLAGS} -Wall -pthread ${MYSQL_CLIENT_CFLAGS} ${libcap_marc_CFLAGS} ${RRDTOOL_CFLAGS} ${iniparser_CFLAGS} -Wno-write-strings
+
+MArCd_CXXFLAGS = ${AM_CXXFLAGS}  -Wall -pthread ${MYSQL_CLIENT_CFLAGS} ${libcap_marc_CFLAGS} ${RRDTOOL_CFLAGS} ${iniparser_CFLAGS}
+MArCd_LDADD = libcommon.a libstatus.a ${MYSQL_CLIENT_LIBS} ${libcap_marc_LIBS} ${libcap_utils_LIBS} ${RRDTOOL_LIBS} ${iniparser_LIBS}
 MArCd_SOURCES = \
 	src/daemon.cpp src/daemon.hpp \
 	src/database.cpp src/database.hpp \
 	src/control.cpp src/control.hpp \
 	src/relay.cpp src/relay.hpp \
-	src/status.cpp \
 	src/utils.cpp src/utils.hpp \
-	src/log.cpp src/log.hpp \
 	src/main.cpp
 
 if BUNDLE_INIPARSER
@@ -30,8 +36,8 @@ MArCd_SOURCES += bundle/iniparser.c bundle/iniparser.h bundle/dictionary.c bundl
 endif
 
 MArelayD_CXXFLAGS = -Wall -DBUILD_RELAY ${libcap_marc_CFLAGS}
-MArelayD_LDADD = ${libcap_marc_LIBS} ${libcap_filter_LIBS}
-MArelayD_SOURCES = src/relay.cpp src/log.cpp src/log.hpp
+MArelayD_LDADD = libcommon.a ${libcap_marc_LIBS} ${libcap_filter_LIBS}
+MArelayD_SOURCES = src/relay.cpp
 
 BUILT_SOURCES = vcs.h
 CLEANFILES = vcs.h
