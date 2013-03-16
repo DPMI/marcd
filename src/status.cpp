@@ -32,6 +32,7 @@
 
 #define RRD_HEARTBEAT "180"    /* can miss two updates */
 
+#include <cstring>
 #include <cassert>
 #include <cerrno>
 #include <sys/types.h>
