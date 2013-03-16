@@ -40,6 +40,7 @@
 
 extern char* rrdpath;
 
+#ifdef HAVE_RRDTOOL
 static char* table_name(const char* mampid, int CI, const char* iface[]){
 	char* buf;
 	int ret;
@@ -63,7 +64,6 @@ static const char* join_cmd(char* dst, int argc, char* argv[]){
 	return dst;
 }
 
-#ifdef HAVE_RRDTOOL
 static void update(const char* when, const char* MAMPid, int CI, long packets, long matched, long dropped, int BU, const char* iface[]){
 	assert(when);
 	assert(MAMPid);
@@ -112,10 +112,8 @@ static void update(const char* when, const char* MAMPid, int CI, long packets, l
 
 	free(filename);
 }
-#endif /* HAVE_RRDTOOL */
 
 static void reset(const char* MAMPid, int noCI, const char* iface[]){
-#ifdef HAVE_RRDTOOL
 	Log::verbose("status", "Resetting RRD counters for %s (%d CI)\n", MAMPid, noCI);
 	update("-1", MAMPid, -1, -1, -1, -1, -1, iface);
 	update("N", MAMPid, -1, 0, 0, 0, 0, iface);
@@ -124,8 +122,8 @@ static void reset(const char* MAMPid, int noCI, const char* iface[]){
 		update("-1", MAMPid, i, -1, -1, -1, -1, iface);
 		update("N", MAMPid, i, 0, 0, 0, 0, iface);
 	}
-#endif /* HAVE_RRDTOOL */
 }
+#endif /* HAVE_RRDTOOL */
 
 struct MPstatusExtended* unpack_status_legacy(const struct MPstatusLegacyExt* old){
 	static struct MPstatusExtended* s = NULL;
@@ -211,6 +209,7 @@ void MP_Status(marc_context_t marc, struct MPstatusExtended* MPstat, struct sock
 #endif /* HAVE_RRDTOOL */
 }
 
+#ifdef HAVE_RRDTOOL
 static void create(const char* mampid, int CI, const char* iface[]){
 	char* filename = table_name(mampid, CI, iface);
 	char* argv[] = {
@@ -242,11 +241,12 @@ static void create(const char* mampid, int CI, const char* iface[]){
 
 	free(filename);
 }
+#endif /* HAVE_RRDTOOL */
 
 void setup_rrd_tables(const char* mampid, unsigned int noCI, const char* iface[]){
 #ifndef HAVE_RRDTOOL
 	return;
-#endif
+#else
 
 	/* create RRD tables as needed */
 	create(mampid, -1, iface);
@@ -256,4 +256,5 @@ void setup_rrd_tables(const char* mampid, unsigned int noCI, const char* iface[]
 
 	/* reset status counters */
 	reset(mampid, noCI, iface);
+#endif
 }
