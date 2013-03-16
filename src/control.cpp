@@ -30,6 +30,7 @@
 #define LOG_EVENT(x, mampid)							\
 	Log::verbose("control", x " from %s:%d (MAMPid: %s)\n", \
   inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid)
+#define UNUSED __attribute__((unused))
 
 #include <caputils/marc.h>
 #include <caputils/log.h>
@@ -261,8 +262,8 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
 	memcpy(&MPadr.sin_addr.s_addr, MPinit->ipaddress,sizeof(struct in_addr));
 
-	const int is_v07 = ntohs(MPinit->version.protocol.major) > 0 || ntohs(MPinit->version.protocol.minor) >= 7;
-	const int is_mp07_11 = is_v07 && version_cmp(MPinit->version.self, 0, 7, 11);
+	const int UNUSED is_v07 = ntohs(MPinit->version.protocol.major) > 0 || ntohs(MPinit->version.protocol.minor) >= 7;
+	const int UNUSED is_mp07_11 = is_v07 && version_cmp(MPinit->version.self, 0, 7, 11);
 
 	Log::verbose("MArCd", "MPinitialization from %s:%d:\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
 	Log::verbose("MArCd", "     .type= %d \n",MPinit->type);
@@ -272,9 +273,11 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 	Log::verbose("MArCd", "     .port = %d \n", ntohs(MPinit->port));
 	Log::verbose("MArCd", "     .maxFilters = %d \n",ntohs(MPinit->maxFilters));
 	Log::verbose("MArCd", "     .noCI = %d \n", ntohs(MPinit->noCI));
+#ifdef CAPUTILS_0_7_14
 	if ( is_mp07_11 ){
 		Log::verbose("MArCd", "     .ma_mtu = %d \n", ntohs(MPinit->ma_mtu));
 	}
+#endif
 	Log::verbose("MArCd", "     .MAMPid = %s \n", mampid_get(MPinit->MAMPid));
 
 	if ( is_v07 ){
@@ -357,7 +360,11 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		         , ntohs(MPinit->port)
 		         , ntohs(MPinit->noCI)
 		         , ntohs(MPinit->maxFilters)
+#ifdef CAPUTILS_0_7_14
 		         , is_mp07_11 ? ntohs(MPinit->ma_mtu) : -1
+#else
+		         , -1
+#endif
 		         , ntohl(MPinit->drivers),
 		         version, iface,
 		         MAMPid);
