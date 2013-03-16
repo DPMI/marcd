@@ -42,19 +42,19 @@ AC_DEFUN([MYSQL_CLIENT],[
   AC_REQUIRE([_MYSQL_CONFIG])
   AC_MSG_CHECKING([for MySQL])
   ifelse([$2], [client],
-               [mysql_libs=--libs mysql_cflags=--cflags],
+               [mysql_libs=--libs mysql_cflags=--include],
          [$2], [thread-safe],
-               [mysql_libs=--libs_r mysql_cflags=--cflags],
+               [mysql_libs=--libs_r mysql_cflags=--include],
          [$2], [embedded],
-               [mysql_libs=--libmysqld-libs mysql_cflags=--cflags],
+               [mysql_libs=--libmysqld-libs mysql_cflags=--include],
          [$2], [], [
     AC_ARG_WITH([mysql-library],
     AS_HELP_STRING([--with-mysql-library], ['client' or 'embedded']),
                    [mysql_lib="$withval"], [mysql_lib=client])
 [                   
     case "$mysql_lib" in
-      client) mysql_libs=--libs mysql_cflags=--cflags ;;
-      embedded) mysql_libs=--libmysqld-libs mysql_cflags=--cflags ;;
+      client) mysql_libs=--libs mysql_cflags=--include ;;
+      embedded) mysql_libs=--libmysqld-libs mysql_cflags=--include ;;
       *) ]AC_MSG_ERROR([Bad value for --with-mysql-library])[
     esac
 ]
