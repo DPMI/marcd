@@ -35,7 +35,7 @@ PKG_PROG_PKG_CONFIG
 AC_SEARCH_LIBS([clock_gettime], [rt])
 AX_INIPARSER
 AC_ARG_PROGRAM
-AM_PROG_AR
+m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 AC_ARG_ENABLE([daemon], [AS_HELP_STRING([--enable-daemon], [Build MArCd @<:@default=enabled@:>@])])
 AC_ARG_ENABLE([relay],  [AS_HELP_STRING([--enable-relay],  [Build MArelayD @<:@default=enabled@:>@])])
