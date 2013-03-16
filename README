@@ -6,6 +6,7 @@ This listens to MP queries and responds with the MA-Controller information.
 Building
 --------
 
+0. [git only] autoreconf --install
 1. mkdir build
 2. ../configure [--prefix /path/to/prefix]
 3. make && make install
