@@ -178,8 +178,8 @@ void MP_Status(marc_context_t marc, struct MPstatusExtended* MPstat, struct sock
 
 	const char* mampid = mampid_get(MPstat->MAMPid);
 
-	Log::verbose("status", "Extended status from %s:%d (MAMPid: %s)\n",
-	             inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid);
+	Log::verbose("status", "Extended status from %s:%d (MAMPid: %s, version: %d)\n",
+	             inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid, MPstat->version);
 
 	/* bump timestamp */ {
 		char buf[16*2+1]; /* mampids are 16 bytes, worst-case escape requires n*2 chars + nullterminator */
