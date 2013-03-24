@@ -55,7 +55,8 @@ static char* table_name(const char* mampid, int CI, const char* iface[]){
 	return buf;
 }
 
-static const char* join_cmd(char* dst, int argc, char* argv[]){
+template <class T>
+static const char* join_cmd(char* dst, int argc, T* argv[]){
 	char* ptr = dst;
 	ptr += sprintf(ptr, "rrdtool");
 	for ( int i = 0; i < argc; i++ ){
@@ -232,7 +233,7 @@ static void create(const char* mampid, int CI, const char* iface[]){
 
 	char buffer[1024];
 	unsigned int argc = sizeof(argv) / sizeof(char*);
-	Log::verbose("status", "    Executing \"%s\"\n", join_cmd(buffer, argc, (char**)argv));
+	Log::verbose("status", "    Executing \"%s\"\n", join_cmd(buffer, argc, argv));
 
 	rrd_clear_error();
 	if ( rrd_create(argc, (char**)argv) < 0 ){
