@@ -162,6 +162,15 @@ struct MPstatusExtended* unpack_status(struct MPstatusExtended* s){
 	s->matched_count = ntohl(s->matched_count);
 	s->dropped_count = ntohl(s->dropped_count);
 
+	/* conver to latest (supported) version */
+	switch ( s->version ){
+	case 1:
+		s->MTU = 0;
+
+	case 2:
+		s->MTU = ntohs(s->MTU);
+	}
+
 	for ( int i = 0; i < s->noCI; i++ ){
 		s->CI[i].packet_count = ntohl(s->CI[i].packet_count);
 		s->CI[i].matched_count = ntohl(s->CI[i].matched_count);
@@ -177,6 +186,11 @@ void MP_Status(marc_context_t marc, struct MPstatusExtended* MPstat, struct sock
 	assert(from);
 
 	const char* mampid = mampid_get(MPstat->MAMPid);
+
+	/* update MP MTU */
+	if ( MPstat->MTU > 0 ){
+		db_query("UPDATE `measurementpoints` SET `MTU` = %d WHERE `mampid` = '%s'", MPstat->MTU, mampid);
+	}
 
 	Log::verbose("status", "Extended status from %s:%d (MAMPid: %s, version: %d)\n",
 	             inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid, MPstat->version);
