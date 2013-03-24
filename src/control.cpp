@@ -146,7 +146,7 @@ int Control::run(){
 
 		case MP_CONTROL_TERMINATE_EVENT:
 			Log::verbose("MArCd", "MP %s has terminated properly.\n", mampid_get(event.MAMPid));
-			mp_set_status(mampid_get(event.MAMPid), MP_STATUS_TERMINATED);
+			mp_set_status(mampid_get(event.MAMPid), MP_STATUS_STOPPED);
 			break;
 
 		case MP_CONTROL_DISTRESS:
