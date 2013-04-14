@@ -65,6 +65,7 @@ struct MPstatusExtended* unpack_status_legacy(const struct MPstatusLegacyExt* ol
 struct MPstatusExtended* unpack_status(struct MPstatusExtended* s);
 void MP_Status_reset(const char* MAMPid, int noCI);
 void MP_Status(marc_context_t marc, MPstatusExtended* MPstat, struct sockaddr* from);
+void MP_DStat(marc_context_t marc, MPDStat* dstat, struct sockaddr* from);
 void setup_rrd_tables(const char* mampid, unsigned int noCI, const char* iface[]);
 
 static int convMySQLtoFPI(struct filter* dst,  MYSQL_RES* src);
@@ -138,6 +139,10 @@ int Control::run(){
 
 		case MP_STATUS3_EVENT:
 			MP_Status(marc, unpack_status(&event.status), (struct sockaddr*)&from);
+			break;
+
+		case MP_DSTAT_EVENT:
+			MP_DStat(marc, &event.dstat, (struct sockaddr*)&from);
 			break;
 
 		case MP_FILTER_REQUEST_EVENT:

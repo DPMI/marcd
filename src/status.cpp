@@ -24,6 +24,7 @@
 #include "database.hpp"
 #include "log.hpp"
 #include <caputils/marc.h>
+#include <caputils/marc_dstat.h>
 #include <caputils/log.h>
 
 #ifdef HAVE_RRDTOOL
@@ -222,6 +223,65 @@ void MP_Status(marc_context_t marc, struct MPstatusExtended* MPstat, struct sock
 		       iface);
 	}
 #endif /* HAVE_RRDTOOL */
+}
+
+void dstat_summary(const struct MPDStat_Summary* s, const char* mampid){
+	char buf[16*2+1]; /* mampids are 16 bytes, worst-case escape requires n*2 chars + nullterminator */
+	mysql_real_escape_string(&connection, buf, mampid, strlen(mampid));
+
+	db_query("UPDATE measurementpoints SET time = CURRENT_TIMESTAMP, status = %d, `MTU` = %d WHERE MAMPid = '%s'",
+	         s->noFilters > 0 ? 2 : 1, ntohs(s->MTU), buf);
+
+	update("N", mampid, -1,
+	       ntohl(s->packet_count),
+	       ntohl(s->matched_count),
+	       ntohl(s->dropped_count),
+	       0, NULL);
+}
+
+void dstat_iface(const struct MPDStat_Iface* s, const char* mampid){
+	const char* table = s->iface; /* bit of a hack by taking the pointer and passing index 0 */
+	update("N", mampid, 0,
+	       ntohl(s->packet_count),
+	       ntohl(s->matched_count),
+	       ntohl(s->dropped_count),
+	       ntohl(s->buffer_usage),
+	       &table);
+}
+
+void MP_DStat(marc_context_t marc, MPDStat* dstat, struct sockaddr* from){
+	assert(dstat);
+	assert(from);
+
+	const char* mampid = mampid_get(dstat->MAMPid);
+	Log::verbose("status", "DStat from %s:%d (MAMPid: %s, version: %d)\n",
+	             inet_ntoa(((struct sockaddr_in*)from)->sin_addr), ntohs(((struct sockaddr_in*)from)->sin_port), mampid, dstat->version);
+
+	if ( dstat->version != 1 ){
+		Log::error("status", "Cannot handle DStat version %d\n", dstat->version);
+		return;
+	}
+
+	const struct MPDStatHdr* cur = dstat->next;
+	while ( cur ){
+		switch ( ntohs(cur->type) ){
+		case MP_DSTAT_TRAILER:
+			break;
+
+		case MP_DSTAT_SUMMARY:
+			dstat_summary((const struct MPDStat_Summary*)cur, mampid);
+			break;
+
+		case MP_DSTAT_IFACE:
+			dstat_iface((const struct MPDStat_Iface*)cur, mampid);
+			break;
+
+		default:
+			Log::verbose("status", "    Unknown DStat header of type %d (%d bytes), skipped.\n", ntohs(cur->type), ntohs(cur->len));
+			break;
+		}
+		cur = mp_dstat_next(cur);
+	}
 }
 
 #ifdef HAVE_RRDTOOL
