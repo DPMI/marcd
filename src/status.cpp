@@ -230,7 +230,7 @@ void dstat_summary(const struct MPDStat_Summary* s, const char* mampid){
 	mysql_real_escape_string(&connection, buf, mampid, strlen(mampid));
 
 	db_query("UPDATE measurementpoints SET time = CURRENT_TIMESTAMP, status = %d, `MTU` = %d WHERE MAMPid = '%s'",
-	         s->noFilters > 0 ? 2 : 1, ntohs(s->MTU), buf);
+	         s->noFilters > 0 ? 2 : 1, ntohl(s->MTU), buf);
 
 	update("N", mampid, -1,
 	       ntohl(s->packet_count),
