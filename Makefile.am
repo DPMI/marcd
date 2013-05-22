@@ -36,7 +36,7 @@ MArCd_SOURCES += bundle/iniparser.c bundle/iniparser.h bundle/dictionary.c bundl
 endif
 
 MArelayD_CXXFLAGS = -Wall -DBUILD_RELAY ${libcap_marc_CFLAGS}
-MArelayD_LDADD = libcommon.a ${libcap_marc_LIBS} ${libcap_filter_LIBS}
+MArelayD_LDADD = libcommon.a ${libcap_utils_LIBS}
 MArelayD_SOURCES = src/relay.cpp
 
 BUILT_SOURCES = vcs.h
