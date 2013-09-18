@@ -1,11 +1,18 @@
 [mysql]
-username = marc          ; mysql username
-password = konko         ; mysql password
-database = marc          ; mysql database
+; Database credentials
+hostname = localhost
+username = marc
+password = konko
+database = marc
 
-; [security]
-; user = marc              ; drop priviledges to this user
+[security]
+; Drop privileges to user/group
+;user = marc
+;group = marc
 
-; [general]
-; relay = true             ; also run a relay
-;datadir = /etc/marcd.conf
+[general]
+; Enable built-in relay.
+;relay = true
+
+; Directory where persistent data is stored
+;datadir = /var/lib/marcd
