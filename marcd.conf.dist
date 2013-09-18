@@ -14,5 +14,8 @@ database = marc
 ; Enable built-in relay.
 ;relay = true
 
-; Directory where persistent data is stored
+; IP to listen on.
+;listen = 0.0.0.0
+
+; Directory where persistent data is stored.
 ;datadir = /var/lib/marcd

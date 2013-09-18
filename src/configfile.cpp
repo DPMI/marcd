@@ -159,7 +159,14 @@ int config::load(int argc, char* argv[]){
 
 	/* general */
 	read_param(have_relay_daemon, config, "general:relay");
+	read_param(set_control_ip, config, "general:listen");
 	read_param(rrdpath, config, "general:datadir");
 
 	return 0;
+}
+
+void config::set_control_ip(const char* addr){
+	if ( inet_aton(addr, &control.addr) == 0 ){
+		fprintf(stderr, "`%s' is not a valid IPv4 address\n", addr);
+	}
 }

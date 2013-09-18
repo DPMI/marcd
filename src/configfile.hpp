@@ -10,6 +10,8 @@ namespace config {
 
 	int load(int argc, char* argv[]);
 
+	void set_control_ip(const char* addr);
+
 };
 
 #endif /* MARCD_CONFIGFILE_H */

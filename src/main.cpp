@@ -278,6 +278,10 @@ static void show_env(){
 		Log::message(MAIN, "  User/Group: %s(%d):%s(%d)\n", drop_username, drop_uid, drop_group, drop_gid);
 	}
 	Log::message(MAIN, "  Database: mysql://%s@%s/%s\n", db_username, db_hostname, db_name);
+
+	char listen[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, &control.addr, listen, INET_ADDRSTRLEN);
+	Log::message(MAIN, "  Listen: %s:%d\n", listen, control.port);
 }
 
 static void handle_signal(int signum){
@@ -315,13 +319,6 @@ static void set_group(const char* groupname){
 static void set_relay_iface(const char* iface){
 	if ( (relay.iface=if_nametoindex(iface)) == 0 ){
 		fprintf(stderr, "%s: `%s' is not a valid interface.\n", program_name, iface);
-		exit(1);
-	}
-}
-
-static void set_control_ip(const char* addr){
-	if ( inet_aton(addr, &control.addr) == 0 ){
-		Log::fatal(MAIN, "`%s' is not a valid IPv4 address\n", addr);
 		exit(1);
 	}
 }
@@ -409,7 +406,7 @@ int main(int argc, char *argv[]){
 			break;
 
 		case 'l': /* --listen */
-			set_control_ip(optarg);
+			config::set_control_ip(optarg);
 			break;
 
 		case 'r': /* --relay */
