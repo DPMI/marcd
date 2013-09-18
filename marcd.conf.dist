@@ -8,3 +8,4 @@ database = marc          ; mysql database
 
 ; [general]
 ; relay = true             ; also run a relay
+;datadir = /etc/marcd.conf

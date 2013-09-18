@@ -29,6 +29,7 @@ extern "C" {
 #include <iniparser.h>
 }
 
+extern char* rrdpath;
 extern bool have_relay_daemon;
 
 template <class T>
@@ -141,6 +142,7 @@ int config::load(int argc, char* argv[]){
 
 	/* general */
 	read_param(have_relay_daemon, config, "general:relay");
+	read_param(rrdpath, config, "general:datadir");
 
 	return 0;
 }
