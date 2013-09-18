@@ -31,6 +31,10 @@ MArCd_SOURCES = \
 	src/utils.cpp src/utils.hpp \
 	src/main.cpp
 
+if HAVE_INIPARSER
+MArCd_SOURCES += src/configfile.cpp src/configfile.hpp
+endif
+
 if BUNDLE_INIPARSER
 MArCd_SOURCES += bundle/iniparser.c bundle/iniparser.h bundle/dictionary.c bundle/dictionary.h
 endif
