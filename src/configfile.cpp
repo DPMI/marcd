@@ -31,15 +31,40 @@ extern "C" {
 
 extern bool have_relay_daemon;
 
-static void set_config_param(char* dst, size_t bytes, dictionary* src, const char* key){
+template <class T>
+static void read_param_impl(T& dst, dictionary* src, const char* key);
+
+template <>
+void read_param_impl<bool>(bool& dst, dictionary* src, const char* key){
+	int value = iniparser_getboolean(src, key, -1);
+	if ( value == -1 ) return;
+	dst = value;
+}
+
+template <>
+void read_param_impl<char*>(char*& dst, dictionary* src, const char* key){
+	const char* value = iniparser_getstring(src, key, NULL);
+	if ( !value ) return;
+	free(dst);
+	dst = strdup(value);
+}
+
+template <class T>
+static void read_param(T& dst, dictionary* src, const char* key){
+	/* iniparser is not const correct and my strings is not writable */
+	static char buf[64];
+	snprintf(buf, sizeof(buf), "%s", key);
+
+	read_param_impl(dst, src, key);
+}
+
+static void read_param(char* dst, size_t bytes, dictionary* src, const char* key){
 	/* iniparser is not const correct and my strings is not writable */
 	static char buf[64];
 	snprintf(buf, sizeof(buf), "%s", key);
 
 	const char* value = iniparser_getstring(src, buf, NULL);
-	if ( !value ){
-		return;
-	}
+	if ( !value ) return;
 
 	snprintf(dst, bytes, "%s", value);
 }
@@ -109,14 +134,13 @@ int config::load(int argc, char* argv[]){
 	free(filename);
 
 	/* mysql config */
-	set_config_param(db_hostname, sizeof(db_hostname), config, "mysql:hostname");
-	set_config_param(db_username, sizeof(db_username), config, "mysql:username");
-	set_config_param(db_password, sizeof(db_password), config, "mysql:password");
-	set_config_param(db_name,     sizeof(db_name),     config, "mysql:database");
+	read_param(db_hostname, sizeof(db_hostname), config, "mysql:hostname");
+	read_param(db_username, sizeof(db_username), config, "mysql:username");
+	read_param(db_password, sizeof(db_password), config, "mysql:password");
+	read_param(db_name,     sizeof(db_name),     config, "mysql:database");
 
-	/* relay */
-	char general_relay[] = "general:relay";
-	have_relay_daemon = iniparser_getboolean(config, general_relay, 0);
+	/* general */
+	read_param(have_relay_daemon, config, "general:relay");
 
 	return 0;
 }
