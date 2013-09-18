@@ -32,6 +32,7 @@ extern "C" {
 }
 
 static std::string config_filename;
+typedef void (*param_callback)(const char*);
 
 template <class T>
 static void read_param_impl(T& dst, dictionary* src, const char* key);
@@ -58,6 +59,16 @@ static void read_param(T& dst, dictionary* src, const char* key){
 	snprintf(buf, sizeof(buf), "%s", key);
 
 	read_param_impl(dst, src, key);
+}
+
+static void read_param(param_callback func, dictionary* src, const char* key){
+	/* iniparser is not const correct and my strings is not writable */
+	static char buf[64];
+	snprintf(buf, sizeof(buf), "%s", key);
+
+	const char* value = iniparser_getstring(src, key, NULL);
+	if ( !value ) return;
+	func(value);
 }
 
 static void read_param(char* dst, size_t bytes, dictionary* src, const char* key){
