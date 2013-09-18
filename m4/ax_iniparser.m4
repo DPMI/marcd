@@ -1,6 +1,6 @@
 AC_DEFUN([AX_INIPARSER], [
   AH_TEMPLATE([HAVE_INIPARSER_H], [Define to 1 if iniparser library is available])
-  AC_ARG_WITH([iniparser], [AS_HELP_STRING([--with-iniparser=DIR], [Support for ini-style configuration files using iniparser. Use "bundle" to use bundled copy (not recommended) @<:@default=enabled@:>@])],, [with_iniparser=no])
+  AC_ARG_WITH([iniparser], [AS_HELP_STRING([--with-iniparser=DIR], [Support for ini-style configuration files using iniparser. Use "bundle" to use bundled copy (not recommended) @<:@default=enabled@:>@])],, [with_iniparser=yes])
   case $with_iniparser in
     no)
       ax_iniparser_want=no
@@ -26,10 +26,10 @@ AC_DEFUN([AX_INIPARSER], [
     CPPFLAGS="$CPPFLAGS -I$ax_iniparser_path/include"
     LDFLAGS="$LDFLAGS -L$ax_iniparser_path/lib"
     AC_CHECK_HEADER([iniparser.h],,[
-      AC_MSG_ERROR([Required library iniparser not found])
+      AC_MSG_ERROR([Required library iniparser not found (use `--with-iniparser=bundle` to use bundled version)])
     ])
     AC_CHECK_LIB([iniparser], [iniparser_load],, [
-      AC_MSG_ERROR([Required library iniparser not found])
+      AC_MSG_ERROR([Required library iniparser not found (use `--with-iniparser=bundle` to use bundled version)])
     ])
 
     if test "x$ax_iniparser_path" != "x"; then
