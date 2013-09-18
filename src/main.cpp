@@ -59,7 +59,9 @@ enum LongFlags {
 	FLAG_GROUP,
 	FLAG_SYSLOG,
 	FLAG_PIDFILE,
-	FLAG_DAEMON
+	FLAG_DAEMON,
+	FLAG_DROP_PRIV,
+	FLAG_NODROP_PRIV,
 };
 
 static const char* shortopts = "r::i:l:sbH:N:u:p:f:vqdh";
@@ -79,8 +81,8 @@ static struct option longopts[] = {
 	{"dbpassword", required_argument, 0, 'p'},
 
 	/* privilege dropping */
-	{"drop",       no_argument, &drop_priv_flag, 1},
-	{"no-drop",    no_argument, &drop_priv_flag, 0},
+	{"drop",       no_argument,       0, FLAG_DROP_PRIV},
+	{"no-drop",    no_argument,       0, FLAG_NODROP_PRIV},
 	{"user",       required_argument, 0, FLAG_USER},
 	{"group",      required_argument, 0, FLAG_GROUP},
 
@@ -296,26 +298,6 @@ static void handle_signal(int signum){
 	}
 }
 
-static void set_username(const char* username){
-	const struct passwd* passwd = getpwnam(username);
-	if ( !passwd ){
-		Log::fatal(MAIN, "No such user `%s', aborting.\n", username);
-		abort();
-	}
-	drop_uid = passwd->pw_uid;
-	drop_username = username;
-}
-
-static void set_group(const char* groupname){
-	const struct group* group = getgrnam(groupname);
-	if ( !group ){
-		Log::fatal(MAIN, "No such group `%s', aborting.\n", groupname);
-		abort();
-	}
-	drop_gid = group->gr_gid;
-	drop_group = groupname;
-}
-
 static void set_relay_iface(const char* iface){
 	if ( (relay.iface=if_nametoindex(iface)) == 0 ){
 		fprintf(stderr, "%s: `%s' is not a valid interface.\n", program_name, iface);
@@ -364,11 +346,19 @@ int main(int argc, char *argv[]){
 			break;
 
 		case FLAG_USER: /* --user */
-			set_username(optarg);
+			config::set_drop_username(optarg);
 			break;
 
 		case FLAG_GROUP: /* --group */
-			set_group(optarg);
+			config::set_drop_group(optarg);
+			break;
+
+		case FLAG_DROP_PRIV: /** --drop */
+			drop_priv_flag = true;
+			break;
+
+		case FLAG_NODROP_PRIV: /** --no-drop */
+			drop_priv_flag = false;
 			break;
 
 		case 'f':

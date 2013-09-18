@@ -7,6 +7,7 @@ database = marc
 
 [security]
 ; Drop privileges to user/group
+;drop = true
 ;user = marc
 ;group = marc
 

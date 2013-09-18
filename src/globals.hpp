@@ -23,7 +23,7 @@ extern char* rrdpath;                       /* path to store rrdtools data in */
 extern const char* pidfile;                 /* which file hold the pid */
 extern bool have_control_daemon;            /* if true daemon should run */
 extern bool have_relay_daemon;              /* if true relay should run */
-extern int drop_priv_flag;                  /* if true privileges should be dropped */
+extern bool drop_priv_flag;                 /* if true privileges should be dropped */
 extern const char* drop_username;
 extern const char* drop_group;
 extern uid_t drop_uid;

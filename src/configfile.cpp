@@ -25,6 +25,8 @@
 #include "database.hpp"
 #include "globals.hpp"
 #include <errno.h>
+#include <pwd.h>
+#include <grp.h>
 #include <string>
 
 extern "C" {
@@ -157,6 +159,11 @@ int config::load(int argc, char* argv[]){
 	read_param(db_password, sizeof(db_password), config, "mysql:password");
 	read_param(db_name,     sizeof(db_name),     config, "mysql:database");
 
+	/* security */
+	read_param(drop_priv_flag, config, "security:drop");
+	read_param(set_drop_username, config, "security:user");
+	read_param(set_drop_group, config, "security:group");
+
 	/* general */
 	read_param(have_relay_daemon, config, "general:relay");
 	read_param(set_control_ip, config, "general:listen");
@@ -169,4 +176,24 @@ void config::set_control_ip(const char* addr){
 	if ( inet_aton(addr, &control.addr) == 0 ){
 		fprintf(stderr, "`%s' is not a valid IPv4 address\n", addr);
 	}
+}
+
+void config::set_drop_username(const char* username){
+	const struct passwd* passwd = getpwnam(username);
+	if ( !passwd ){
+		fprintf(stderr, "No such user `%s', ignored.\n", username);
+		return;
+	}
+	drop_uid = passwd->pw_uid;
+	drop_username = username;
+}
+
+void config::set_drop_group(const char* groupname){
+	const struct group* group = getgrnam(groupname);
+	if ( !group ){
+		fprintf(stderr, "No such group `%s', ignored.\n", groupname);
+		return;
+	}
+	drop_gid = group->gr_gid;
+	drop_group = groupname;
 }

@@ -11,6 +11,8 @@ namespace config {
 	int load(int argc, char* argv[]);
 
 	void set_control_ip(const char* addr);
+	void set_drop_username(const char* username);
+	void set_drop_group(const char* groupname);
 
 };
 
