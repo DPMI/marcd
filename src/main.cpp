@@ -281,7 +281,10 @@ static int check_env(){
 }
 
 static void show_env(){
-	Log::message(MAIN, "Environment:\n");
+	Log::message(MAIN, "Configuration:\n");
+#ifdef HAVE_INIPARSER_H
+	Log::message(MAIN, "  File: %s\n", config::filename() ? config::filename() : "<none>");
+#endif
 	Log::message(MAIN, "  Datadir: %s\n", rrdpath);
 	Log::message(MAIN, "  Pidfile: %s\n", pidfile);
 	if ( drop_priv_flag ){

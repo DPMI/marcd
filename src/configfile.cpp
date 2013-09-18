@@ -24,11 +24,13 @@
 #include "configfile.hpp"
 #include "database.hpp"
 #include <errno.h>
+#include <string>
 
 extern "C" {
 #include <iniparser.h>
 }
 
+static std::string config_filename;
 extern char* rrdpath;
 extern bool have_relay_daemon;
 
@@ -68,6 +70,10 @@ static void read_param(char* dst, size_t bytes, dictionary* src, const char* key
 	if ( !value ) return;
 
 	snprintf(dst, bytes, "%s", value);
+}
+
+const char* config::filename(){
+	return !config_filename.empty() ? config_filename.c_str() : NULL;
 }
 
 int config::load(int argc, char* argv[]){
@@ -129,6 +135,7 @@ int config::load(int argc, char* argv[]){
 	}
 
 	/* parse configuration */
+	config_filename = filename;
 	if ( !(config=iniparser_load(filename)) ){
 		return 1;
 	}
