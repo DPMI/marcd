@@ -50,21 +50,8 @@
 /* GLOBALS */
 static const char* program_name;
 
-char* rrdpath;
 static int daemon_mode = 0;
-static const char* pidfile = DATA_DIR"/marc.pid";
-int verbose_flag = 0;
-int debug_flag = 0;
-static int syslog_flag = 0;
 bool volatile keep_running = true;
-
-static int drop_priv_flag = 1;
-static const char* drop_username = "marc";
-static const char* drop_group = "marc";
-static uid_t drop_uid = 0;
-static gid_t drop_gid = 0;
-bool have_control_daemon = false;
-bool have_relay_daemon = false;
 
 enum LongFlags {
 	FLAG_DATADIR = 256,
@@ -376,7 +363,7 @@ int main(int argc, char *argv[]){
 			break;
 
 		case 's': /* --syslog */
-			syslog_flag = 1;
+			syslog_flag = true;
 			break;
 
 		case FLAG_USER: /* --user */

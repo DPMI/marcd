@@ -23,6 +23,7 @@
 
 #include "configfile.hpp"
 #include "database.hpp"
+#include "globals.hpp"
 #include <errno.h>
 #include <string>
 
@@ -31,8 +32,6 @@ extern "C" {
 }
 
 static std::string config_filename;
-extern char* rrdpath;
-extern bool have_relay_daemon;
 
 template <class T>
 static void read_param_impl(T& dst, dictionary* src, const char* key);
