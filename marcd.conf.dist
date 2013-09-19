@@ -1,10 +1,22 @@
 [mysql]
-username = marc          ; mysql username
-password = konko         ; mysql password
-database = marc          ; mysql database
+; Database credentials
+hostname = localhost
+username = marc
+password = konko
+database = marc
 
-; [security]
-; user = marc              ; drop priviledges to this user
+[security]
+; Drop privileges to user/group
+;drop = true
+;user = marc
+;group = marc
 
-; [general]
-; relay = true             ; also run a relay
+[general]
+; Enable built-in relay.
+;relay = true
+
+; IP to listen on.
+;listen = 0.0.0.0
+
+; Directory where persistent data is stored.
+;datadir = /var/lib/marcd

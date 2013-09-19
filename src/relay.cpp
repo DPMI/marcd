@@ -222,8 +222,6 @@ int Relay::run(){
 
 #ifdef BUILD_RELAY
 
-int verbose_flag = 0;
-int debug_flag = 0;
 FILE* verbose = NULL; /* stdout if verbose is enabled, /dev/null otherwise */
 bool volatile keep_running = true;
 

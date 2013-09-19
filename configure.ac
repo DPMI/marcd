@@ -67,8 +67,14 @@ AS_IF([test "x$with_syslog" != "xno"], [
 AC_DEFINE([MA_CONTROL_DEFAULT_PORT], [1600], [Which port MArCd should listen on])
 AC_DEFINE([MA_RELAY_DEFAULT_PORT], [1500], [Which port MArelayD should listen on])
 
-dnl If --with-iniparser=bundle is specified build the source
+
+
+dnl ini-parser
+AM_CONDITIONAL(HAVE_INIPARSER, [test "x$with_iniparser" != "xno"])
 AM_CONDITIONAL(BUNDLE_INIPARSER, [test "x$ax_iniparser_bundle" = "xyes"])
+AC_ARG_VAR([MARCD_DEFAULT_CONFIG_FILE], , Name of the default configuration file (in sysconfdir) @<:@default=marcd.conf@:>@)
+AS_IF([test -z "$MARCD_DEFAULT_CONFIG_FILE"], [MARCD_DEFAULT_CONFIG_FILE="marcd.conf"])
+AC_DEFINE_UNQUOTED([MARCD_DEFAULT_CONFIG_FILE], "$MARCD_DEFAULT_CONFIG_FILE", [Default configuration filename])
 
 dnl Find out what arch is used for (debian) packaging.
 ARCH=`echo $host|cut -d '-' -f 1`
