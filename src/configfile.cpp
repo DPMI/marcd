@@ -37,17 +37,17 @@ static std::string config_filename;
 typedef void (*param_callback)(const char*);
 
 template <class T>
-static void read_param_impl(T& dst, dictionary* src, const char* key);
+static void read_param_impl(T& dst, dictionary* src, char* key);
 
 template <>
-void read_param_impl<bool>(bool& dst, dictionary* src, const char* key){
+void read_param_impl<bool>(bool& dst, dictionary* src, char* key){
 	int value = iniparser_getboolean(src, key, -1);
 	if ( value == -1 ) return;
 	dst = value;
 }
 
 template <>
-void read_param_impl<char*>(char*& dst, dictionary* src, const char* key){
+void read_param_impl<char*>(char*& dst, dictionary* src, char* key){
 	const char* value = iniparser_getstring(src, key, NULL);
 	if ( !value ) return;
 	free(dst);
@@ -60,7 +60,7 @@ static void read_param(T& dst, dictionary* src, const char* key){
 	static char buf[64];
 	snprintf(buf, sizeof(buf), "%s", key);
 
-	read_param_impl(dst, src, key);
+	read_param_impl(dst, src, buf);
 }
 
 static void read_param(param_callback func, dictionary* src, const char* key){
@@ -68,7 +68,7 @@ static void read_param(param_callback func, dictionary* src, const char* key){
 	static char buf[64];
 	snprintf(buf, sizeof(buf), "%s", key);
 
-	const char* value = iniparser_getstring(src, key, NULL);
+	const char* value = iniparser_getstring(src, buf, NULL);
 	if ( !value ) return;
 	func(value);
 }
