@@ -1,0 +1,11 @@
+[Unit]
+Description=MA Control Daemon
+After=syslog.target
+
+[Service]
+Type=forking
+PIDFile=/var/lib/marc/marcd.pid
+ExecStart=/usr/bin/MArCd --pidfile /var/lib/marc/marcd.pid --relay --syslog --daemon
+
+[Install]
+WantedBy=multi-user.target
