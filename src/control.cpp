@@ -273,19 +273,19 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 	const int UNUSED is_mp07_11 = is_v07 && version_cmp(MPinit->version.self, 0, 7, 11);
 
 	Log::verbose("MArCd", "MPinitialization from %s:%d:\n", inet_ntoa(MPadr.sin_addr), ntohs(MPinit->port));
-	Log::verbose("MArCd", "     .type= %d \n",MPinit->type);
-	Log::verbose("MArCd", "     .mac = %s \n", hexdump_address(&MPinit->hwaddr));
-	Log::verbose("MArCd", "     .name= %s \n",MPinit->hostname);
-	Log::verbose("MArCd", "     .ipaddress = %s \n", inet_ntoa(MPadr.sin_addr));
-	Log::verbose("MArCd", "     .port = %d \n", ntohs(MPinit->port));
-	Log::verbose("MArCd", "     .maxFilters = %d \n",ntohs(MPinit->maxFilters));
-	Log::verbose("MArCd", "     .noCI = %d \n", ntohs(MPinit->noCI));
+	Log::verbose("MArCd", "     .type             = %d \n",MPinit->type);
+	Log::verbose("MArCd", "     .mac              = %s \n", hexdump_address(&MPinit->hwaddr));
+	Log::verbose("MArCd", "     .name             = %s \n",MPinit->hostname);
+	Log::verbose("MArCd", "     .ipaddress        = %s \n", inet_ntoa(MPadr.sin_addr));
+	Log::verbose("MArCd", "     .port             = %d \n", ntohs(MPinit->port));
+	Log::verbose("MArCd", "     .maxFilters       = %d \n",ntohs(MPinit->maxFilters));
+	Log::verbose("MArCd", "     .noCI             = %d \n", ntohs(MPinit->noCI));
 #ifdef CAPUTILS_0_7_14
 	if ( is_mp07_11 ){
-		Log::verbose("MArCd", "     .ma_mtu = %d \n", ntohs(MPinit->ma_mtu));
+		Log::verbose("MArCd", "     .ma_mtu           = %d \n", ntohs(MPinit->ma_mtu));
 	}
 #endif
-	Log::verbose("MArCd", "     .MAMPid = %s \n", mampid_get(MPinit->MAMPid));
+	Log::verbose("MArCd", "     .MAMPid           = %s \n", mampid_get(MPinit->MAMPid));
 
 	if ( is_v07 ){
 		Log::verbose("MArCd", "     .version.protocol = %d.%d\n", ntohs(MPinit->version.protocol.major), ntohs(MPinit->version.protocol.minor));
