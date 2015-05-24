@@ -472,6 +472,7 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
 	}
 
 	MYSQL_RES* result = mysql_store_result(&connection);
+	Log::verbose("MArCd","Stored result.\n");
 	if ( !send_mysql_filter(marc, result, from, filter->MAMPid) ){
 		Log::verbose("MArCd", "No filter matching {%02d}\n", ntohl(filter->id));
 		MPMessage reply;
