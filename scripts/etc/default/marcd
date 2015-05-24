@@ -1,0 +1,2 @@
+MARCD_IFACE="eth0"
+#MARCD_OPTS="--debug --listen 10.5.5.1"
