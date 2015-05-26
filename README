@@ -26,9 +26,19 @@ Install and setup
 
 1. Create a user/group to run MArCd, by default marc/marc is used.
 2. Put the group in the webgui config as well.
-3. Make $datadir writable by this group.
-4. Edit $sysconf/marcd.conf (see $sysconf/marcd.conf.dist)
-5. See `MArCd --help` and MArCd(1) for more help.
+3. Create a directory DATADIR where it will store its rrd files, ie. /var/lib/marcd.
+4. Make DATADIR writable by this group.
+
+5. Edit $sysconf/marcd.conf (see $sysconf/marcd.conf.dist)
+   If on a ubuntu/debian system copy the files in scripts folder to /etc
+      cp scripts/* /etc/ 
+   Edit /etc/defaults/marcd, /etc/marcd/marcd.conf and /etc/init.d/marcd if needed.
+
+6. See `MArCd --help` and MArCd(1) for more help.
+
+
+
+
 
 Measurement Area Relay
 ======================
