@@ -420,6 +420,12 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 	}
 
 	result = mysql_store_result(&connection);
+	if ( !result ){
+		Log::error("MArCd", "mysql_store_reult failed: %s\n", mysql_error(&connection));
+		Log::error("MArcD", "Failed to send filters\n");
+		return;
+	}
+
 	int rows = (int)mysql_num_rows(result);
 	Log::verbose("MArCd", "MP %s has %d filters assigned.\n", MAMPid, rows);
 
@@ -472,6 +478,12 @@ static void MP_GetFilter(marc_context_t marc, MPFilterID* filter, struct sockadd
 	}
 
 	MYSQL_RES* result = mysql_store_result(&connection);
+	if ( !result ){
+		Log::error("MArCd", "mysql_store_reult failed: %s\n", mysql_error(&connection));
+		Log::error("MArcD", "Failed to send filter {%02d}\n", ntohl(filter->id));
+		return;
+	}
+
 	Log::verbose("MArCd","Stored result.\n");
 	if ( !send_mysql_filter(marc, result, from, filter->MAMPid) ){
 		Log::verbose("MArCd", "No filter matching {%02d}\n", ntohl(filter->id));
