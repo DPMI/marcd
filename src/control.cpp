@@ -207,7 +207,9 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
 	/* destination */
 	const char* destination = row[21];
 	enum AddressType type = (enum AddressType)atoi(row[22]);
-	stream_addr_aton(&rule->dest, destination, type, 0);
+	if ( stream_addr_aton(&rule->dest, destination, type, 0) != 0 ){
+		Log::error("Failed to parse destination '%s` for filter {%02d}: %s\n", row[21], row[0], strerror(errno));
+	}
 
 	return 1;
 }
