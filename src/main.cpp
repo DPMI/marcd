@@ -495,7 +495,9 @@ int main(int argc, char *argv[]){
 
 			/* change owner of pidfile */
 			if ( drop_priv_flag ){
-				chown(pidfile, drop_uid, drop_gid);
+				if ( chown(pidfile, drop_uid, drop_gid) != 0 ){
+					Log::error("failed to change owner of '%s`, will probably fail to unlink it later: %s\n", pidfile, strerror(errno));
+				}
 			}
 
 			return 0;
