@@ -219,8 +219,8 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
  * @return Zero on error.
  */
 static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sockaddr* dst, const char* MAMPid){
-	struct MPFilter MPfilter;
-	struct filter filter;
+	struct MPFilter MPfilter = {0,};
+	struct filter filter = {0,};
 
 	if ( !convMySQLtoFPI(&filter, result) ){
 		return 0;
