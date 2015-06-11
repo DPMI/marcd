@@ -27,6 +27,7 @@
 #include "relay.hpp"
 #include "database.hpp"
 #include "log.hpp"
+#include "vcs.h"
 
 #include <caputils/marc.h>
 #include <caputils/log.h>
@@ -187,7 +188,11 @@ static void setup_output(){
 	} else {
 		Log::set_syslog_destination(severity);
 	}
+#ifdef VCS_REV
+	Log::message(MAIN, "%s-"VERSION"[%s/%s] (caputils-%s) starting.\n", program_name, VCS_REV, VCS_BRANCH, caputils_version(NULL));
+#else
 	Log::message(MAIN, "%s-"VERSION" (caputils-%s) starting.\n", program_name, caputils_version(NULL));
+#endif
 }
 
 static const char* get_username(const uid_t id){
