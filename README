@@ -17,7 +17,7 @@ with rrdtool but can be disabled using `--without-rrdtool`. If you only intend
 to only build either MArCd or MArelayD use the flags `--disable-daemon` and
 `--disable-relay`.
 
-Mysql support is required when building control daemon.
+Mysql support is required when building control daemon, i.e. libmysqlclient-dev in Ubuntu packages. 
 
 See `configure --help` for more help.
 
@@ -50,3 +50,14 @@ the control daemon is located.
 It can either be run standalone with MArelayD or integrated in MArCd. The former
 is useful to have multiple subnets with a single MArCd and the later is useful
 if there is only one subnet.
+
+
+
+
+
+HINTS 
+=====
+
+Allways run configure --with-iniparser=bundle (perhaps make it default).
+When running configure and PKG_PROG_PKG_CONFIG: command not found, make sure that you have the latest pkg-config installed, then re-run config. 
+
