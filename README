@@ -33,6 +33,7 @@ Install and setup
    If on a ubuntu/debian system copy the files in scripts folder to /etc
       cp scripts/* /etc/ 
    Edit /etc/defaults/marcd, /etc/marcd/marcd.conf and /etc/init.d/marcd if needed.
+   *set the WORKDIR parameter in /etc/init.d/marcd to match your folder (/var/lib/marcd)
 
 6. See `MArCd --help` and MArCd(1) for more help.
 
