@@ -183,26 +183,69 @@ static int convMySQLtoFPI(struct filter* rule,  MYSQL_RES* result){
 	rule->caplen = atoi(row[23]);
 
 	strncpy(rule->iface, row[3], 8);
-	rule->vlan_tci=atol(row[4]);
-	rule->vlan_tci_mask=atol(row[5]);
-	rule->eth_type=atol(row[6]);
-	rule->eth_type_mask=atol(row[7]);
 
+	if(row[4]!=NULL) {
+	  rule->vlan_tci=atol(row[4]);
+	} else {
+	  rule->vlan_tci=0;
+	}
+
+
+	if(row[5]!=NULL) {
+	  rule->vlan_tci_mask=atol(row[5]);
+	} else {
+	  rule->vlan_tci_mask=0;
+	}
+
+	if(row[6]!=NULL) {
+	  rule->eth_type=atol(row[6]);
+	} else {
+	  rule->eth_type=0;
+	}
+
+	if(row[7]!=NULL) {
+	  rule->eth_type_mask=atol(row[7]);
+	} else {
+	  rule->eth_type_mask=0;
+	}
+	
 	inet_atoP((char*)rule->eth_src.ether_addr_octet,row[8]);
 	inet_atoP((char*)rule->eth_src_mask.ether_addr_octet,row[9]);
 	inet_atoP((char*)rule->eth_dst.ether_addr_octet,row[10]);
 	inet_atoP((char*)rule->eth_dst_mask.ether_addr_octet,row[11]);
 
-	rule->ip_proto=atoi(row[12]);
+	if (row[12]!=NULL){
+	  rule->ip_proto=atoi(row[12]);
+	} else {
+	  rule->ip_proto=0;
+	}
+	
 	rule->ip_src.s_addr = inet_addr(row[13]);
 	rule->ip_src_mask.s_addr = inet_addr(row[14]);
 	rule->ip_dst.s_addr = inet_addr(row[15]);
 	rule->ip_dst_mask.s_addr = inet_addr(row[16]);
 
-	rule->src_port=atoi(row[17]);
-	rule->src_port_mask=atoi(row[18]);
-	rule->dst_port=atoi(row[19]);
-	rule->dst_port_mask=atoi(row[20]);
+	if(row[17]!=NULL) {
+	  rule->src_port=atoi(row[17]);
+	} else {
+	  rule->src_port=0;
+	}
+
+	if(row[18]!=NULL) {
+	  rule->src_port_mask=atoi(row[18]);
+	} 
+
+	if(row[19]!=NULL) {
+	  rule->dst_port=atoi(row[19]);
+	} else {
+	  rule->dst_port=0;
+	}
+
+	if(row[20]!=NULL) {
+	  rule->dst_port_mask=atoi(row[20]);
+	} else {
+	  rule->dst_port_mask=0;
+	}
 
 	/* destination */
 	const char* destination = row[21];
@@ -222,10 +265,13 @@ static int send_mysql_filter(marc_context_t marc, MYSQL_RES *result, struct sock
 	struct MPFilter MPfilter = {0,};
 	struct filter filter = {0,};
 
+	//	Log::verbose("MArCd", "convMySQLtoFPI.\n");
 	if ( !convMySQLtoFPI(&filter, result) ){
 		return 0;
 	}
 
+	
+	//	Log::verbose("MArCd", "mampid_set().\n");
 	MPfilter.type = MP_FILTER_EVENT;
 	mampid_set(MPfilter.MAMPid, MAMPid);
 	filter_pack(&filter, &MPfilter.filter);
@@ -318,7 +364,8 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 		               "  port='%d',\n"
 		               "  mac='%s',\n"
 		               "  maxFilters=%d,\n"
-		               "  noCI=%d\n"
+		               "  noCI=%d,\n"
+			       "  comment='n/a'\n "
 		               , MPinit->hostname
 		               , inet_ntoa(MPadr.sin_addr)
 		               , ntohs(MPinit->port)
@@ -433,7 +480,8 @@ static void MP_Init(marc_context_t marc, MPinitialization* MPinit, struct sockad
 
 	/*process each row*/
 	for( int n=0; n < rows; n++ ){
-		send_mysql_filter(marc, result, from, MAMPid);
+	  //  Log::verbose("MARCd", "Filter %s:%d \n",MAMPid, n);
+	  send_mysql_filter(marc, result, from, MAMPid);
 	}
 
 	/* free the result set */
